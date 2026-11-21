@@ -83,6 +83,9 @@ jobs:
     name: SEA macOS arm64 (optional)
     runs-on: macos-14
     timeout-minutes: 10
+    continue-on-error: true
+    outputs:
+      ready: ${{ steps.arm64_ready.outputs.ready }}
 
     steps:
       - name: Check out repository
@@ -114,6 +117,12 @@ jobs:
           name: circuit-bastion-sea-macos-arm64
           path: dist/sea/circuit-bastion-macos-arm64
           if-no-files-found: error
+
+      - name: Mark arm64 artifact ready
+        id: arm64_ready
+        if: success()
+        shell: bash
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: [portable, sea-required]
@@ -167,7 +176,7 @@ jobs:
 
   publish_arm64:
     needs: [publish, sea_arm64]
-    if: ${{ always() && needs.publish.result == 'success' && needs.sea_arm64.result == 'success' }}
+    if: ${{ always() && needs.publish.result == 'success' && needs.sea_arm64.outputs.ready == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
