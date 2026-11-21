@@ -15,7 +15,6 @@ func _ready() -> void:
 	view = BATTLE_VIEW_SCRIPT.new()
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(view)
-	view.set_simulation(simulation)
 	simulation.event_recorded.connect(_on_event_recorded)
 	simulation.state_changed.connect(_on_state_changed)
 	view.command_requested.connect(_on_command_requested)
