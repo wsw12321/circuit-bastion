@@ -37,10 +37,6 @@ jobs:
             platform: linux
             arch: x64
             executable: circuit-bastion-linux-x64
-          - os: macos-13
-            platform: macos
-            arch: x64
-            executable: circuit-bastion-macos-x64
           - os: windows-2022
             platform: windows
             arch: x64
@@ -124,6 +120,51 @@ jobs:
         shell: bash
         run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
+  sea_macos_x64:
+    name: SEA macOS x64 (optional)
+    runs-on: macos-13
+    timeout-minutes: 10
+    continue-on-error: true
+    outputs:
+      ready: ${{ steps.macos_x64_ready.outputs.ready }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install SEA tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        run: npm run check
+
+      - name: Build SEA executable
+        env:
+          SEA_NAME: circuit-bastion-macos-x64
+          SEA_OUTPUT_DIR: dist/sea
+        run: npm run build:sea
+
+      - name: Smoke test SEA executable
+        run: node scripts/smoke-sea.mjs dist/sea/circuit-bastion-macos-x64
+
+      - name: Upload optional SEA executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-bastion-sea-macos-x64
+          path: dist/sea/circuit-bastion-macos-x64
+          if-no-files-found: error
+
+      - name: Mark macOS x64 artifact ready
+        id: macos_x64_ready
+        if: success()
+        shell: bash
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
+
   publish:
     needs: [portable, sea-required]
     runs-on: ubuntu-latest
@@ -133,11 +174,23 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Download build artifacts
+      - name: Download portable package
         uses: actions/download-artifact@v4
         with:
-          path: release-assets
-          merge-multiple: false
+          name: circuit-bastion-portable
+          path: release-assets/circuit-bastion-portable
+
+      - name: Download Linux SEA executable
+        uses: actions/download-artifact@v4
+        with:
+          name: circuit-bastion-sea-linux-x64
+          path: release-assets/circuit-bastion-sea-linux-x64
+
+      - name: Download Windows SEA executable
+        uses: actions/download-artifact@v4
+        with:
+          name: circuit-bastion-sea-windows-x64
+          path: release-assets/circuit-bastion-sea-windows-x64
 
       - name: Assemble platform archives
         shell: bash
@@ -210,3 +263,40 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$GITHUB_REF_NAME" release-dist/circuit-bastion-macos-arm64.zip --clobber
+
+  publish_macos_x64:
+    needs: [publish, sea_macos_x64]
+    if: ${{ always() && needs.publish.result == 'success' && needs.sea_macos_x64.outputs.ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download optional macOS x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: circuit-bastion-sea-macos-x64
+          path: release-assets/circuit-bastion-sea-macos-x64
+
+      - name: Assemble optional macOS x64 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name=circuit-bastion-macos-x64
+          package_dir="release-dist/${package_name}"
+          mkdir -p "$package_dir"
+          executable=$(find release-assets/circuit-bastion-sea-macos-x64 -maxdepth 1 -type f -print -quit)
+          cp "$executable" "$package_dir/"
+          cp README.md RUNNING.md "$package_dir/"
+          chmod +x "$package_dir/$(basename "$executable")"
+          (
+            cd release-dist
+            zip -qr "${package_name}.zip" "$package_name"
+          )
+
+      - name: Upload optional macOS x64 archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" release-dist/circuit-bastion-macos-x64.zip --clobber
