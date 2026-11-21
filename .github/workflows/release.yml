@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'release/**'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,14 +20,33 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Build portable release package
-        run: bash scripts/package-release.sh "$GITHUB_REF_NAME"
+      - name: Resolve release version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            release_tag="$GITHUB_REF_NAME"
+          else
+            release_tag="${GITHUB_REF_NAME#release/}"
+          fi
+          [[ "$release_tag" == v* ]] || { echo "Expected a v* release tag, got $release_tag" >&2; exit 1; }
+          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release and upload package
+      - name: Build portable release package
+        run: bash scripts/package-release.sh "${{ steps.release.outputs.tag }}"
+
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          archive="dist/circuit-bastion-${GITHUB_REF_NAME}.zip"
-          gh release create "$GITHUB_REF_NAME" "$archive" \
-            --title "Circuit Bastion ${GITHUB_REF_NAME}" \
-            --generate-notes
+          set -euo pipefail
+          archive="dist/circuit-bastion-${RELEASE_TAG}.zip"
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${archive}" --clobber
+          else
+            gh release create "${RELEASE_TAG}" "${archive}" \
+              --title "Circuit Bastion ${RELEASE_TAG}" \
+              --generate-notes
+          fi
