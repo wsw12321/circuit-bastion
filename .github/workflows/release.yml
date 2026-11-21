@@ -27,6 +27,58 @@ jobs:
           path: dist/circuit-bastion-${{ github.ref_name }}.zip
           if-no-files-found: error
 
+  godot-required:
+    name: Godot desktop exports (Linux x64 + Windows x64)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pinned Godot editor and export templates
+        shell: bash
+        env:
+          GODOT_VERSION: 4.3
+          GODOT_RELEASE: 4.3-stable
+        run: |
+          set -euo pipefail
+          godot_root="$RUNNER_TEMP/godot"
+          template_root="$HOME/.local/share/godot/export_templates"
+          mkdir -p "$godot_root" "$template_root"
+          curl --fail --retry 3 --location \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" \
+            --output "$godot_root/editor.zip"
+          unzip -q "$godot_root/editor.zip" -d "$godot_root/editor"
+          mv "$godot_root/editor/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$godot_root/godot"
+          chmod +x "$godot_root/godot"
+          curl --fail --retry 3 --location \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" \
+            --output "$godot_root/templates.tpz"
+          unzip -q "$godot_root/templates.tpz" -d "$godot_root/templates"
+          cp -R "$godot_root/templates/templates/${GODOT_VERSION}.stable" "$template_root/"
+          echo "GODOT_BIN=$godot_root/godot" >> "$GITHUB_ENV"
+
+      - name: Run Godot headless smoke checks
+        run: |
+          "$GODOT_BIN" --headless --path . --script scripts/godot_smoke.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/simulation_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+
+      - name: Export Linux x64 Godot build
+        run: bash scripts/package-godot-release.sh "Linux/X11" "circuit-bastion-godot-linux-x64" "$GITHUB_REF_NAME"
+
+      - name: Export Windows x64 Godot build
+        run: bash scripts/package-godot-release.sh "Windows Desktop" "circuit-bastion-godot-windows-x64" "$GITHUB_REF_NAME"
+
+      - name: Upload Godot packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-bastion-godot
+          path: dist/godot/*.zip
+          if-no-files-found: error
+
   sea-required:
     name: SEA ${{ matrix.platform }} ${{ matrix.arch }}
     strategy:
@@ -166,7 +218,7 @@ jobs:
         run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
   publish:
-    needs: [portable, sea-required]
+    needs: [portable, godot-required, sea-required]
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -192,12 +244,19 @@ jobs:
           name: circuit-bastion-sea-windows-x64
           path: release-assets/circuit-bastion-sea-windows-x64
 
+      - name: Download Godot desktop packages
+        uses: actions/download-artifact@v4
+        with:
+          name: circuit-bastion-godot
+          path: release-assets/circuit-bastion-godot
+
       - name: Assemble platform archives
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-dist
           cp release-assets/circuit-bastion-portable/*.zip release-dist/
+          cp release-assets/circuit-bastion-godot/*.zip release-dist/
 
           for artifact_dir in release-assets/circuit-bastion-sea-*; do
             executable=$(find "$artifact_dir" -maxdepth 1 -type f -print -quit)

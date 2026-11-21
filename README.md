@@ -394,7 +394,7 @@ npm run check
 npm start
 ```
 
-推送 `v*` 标签后，GitHub Actions 会构建 Windows x64、Linux x64、macOS x64 和 macOS arm64 的 Node.js SEA 独立可执行文件，并同时上传一个不含 Node.js 的便携 Node 包作为 fallback。各平台下载包的运行方式记录在 [RUNNING.md](RUNNING.md) 中。
+推送 `v*` 标签后，GitHub Actions 会构建 Godot Linux x64 与 Windows x64 桌面包，同时构建 Windows x64、Linux x64 和可选 macOS 架构的 Node.js SEA 独立可执行文件，并上传一个不含 Node.js 的便携 Node 包作为 fallback。Godot 与 Node 资产会一起进入 GitHub Release，各平台下载包的运行方式记录在 [RUNNING.md](RUNNING.md) 中。
 
 ## 19. Godot 4 桌面垂直切片
 
@@ -412,8 +412,14 @@ godot4 --path .
 
 ```bash
 godot4 --headless --path . --scene res://scenes/main.tscn --quit-after 2 --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+# 主场景实例化 smoke test
+godot4 --headless --path . --script scripts/godot_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 # 确定性模拟冒烟测试
 godot4 --headless --path . --script scripts/simulation_probe.gd
 ```
+
+推送 `v*` 标签后，Release 会同时上传 `circuit-bastion-godot-linux-x64.zip` 和
+`circuit-bastion-godot-windows-x64.zip`。这些包包含可直接启动的 Godot 导出产物、
+README、RUNNING.md 和版本信息。Node.js SEA 与 portable 包继续作为兼容 fallback。
 
 仓库中的 Node.js 页面仍保留用于设计稿对照和发行包 fallback，桌面垂直切片是后续玩法实现的主技术方向。

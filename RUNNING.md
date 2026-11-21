@@ -51,5 +51,22 @@ Headless validation is available for CI or servers without a display:
 ```bash
 godot4 --headless --path . --scene res://scenes/main.tscn --quit-after 2 \
   --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+godot4 --headless --path . --script scripts/godot_smoke.gd \
+  --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 godot4 --headless --path . --script scripts/simulation_probe.gd
 ```
+
+Version tags also publish `circuit-bastion-godot-linux-x64.zip` and
+`circuit-bastion-godot-windows-x64.zip`. Each archive contains the exported
+Godot executable, project documentation, and `VERSION.txt`. macOS remains an
+optional release target and never blocks the required Linux/Windows release.
+
+### Godot Release packages
+
+Version tags publish two desktop archives alongside the Node fallback packages:
+
+- `circuit-bastion-godot-linux-x64.zip` runs the Linux x64 executable directly.
+- `circuit-bastion-godot-windows-x64.zip` runs the Windows x64 `.exe` directly.
+
+Each archive includes `README.md`, this file, and `VERSION.txt`. The macOS SEA
+packages remain optional because hosted macOS runners can be queued independently.

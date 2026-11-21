@@ -50,3 +50,29 @@ jobs:
 
           cat /tmp/circuit-bastion-server.log
           exit 1
+
+  godot-smoke:
+    name: Godot headless smoke
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pinned Godot editor
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot_root="$RUNNER_TEMP/godot"
+          mkdir -p "$godot_root"
+          curl --fail --retry 3 --location "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" --output "$godot_root/editor.zip"
+          unzip -q "$godot_root/editor.zip" -d "$godot_root/editor"
+          mv "$godot_root/editor/Godot_v4.3-stable_linux.x86_64" "$godot_root/godot"
+          chmod +x "$godot_root/godot"
+          echo "GODOT_BIN=$godot_root/godot" >> "$GITHUB_ENV"
+
+      - name: Run Godot smoke checks
+        run: |
+          "$GODOT_BIN" --headless --path . --script scripts/godot_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/simulation_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
