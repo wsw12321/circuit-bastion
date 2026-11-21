@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies with lockfile
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install dependencies without lockfile
+        if: hashFiles('package-lock.json') == ''
+        run: npm install --ignore-scripts --no-audit --no-fund --no-package-lock
+
+      - name: Check JavaScript syntax
+        run: npm run check
+
+      - name: Smoke test server
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm start > /tmp/circuit-bastion-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error http://127.0.0.1:4173/ > /tmp/circuit-bastion.html; then
+              grep -q 'CIRCUIT BASTION' /tmp/circuit-bastion.html
+              exit 0
+            fi
+            sleep 0.25
+          done
+
+          cat /tmp/circuit-bastion-server.log
+          exit 1

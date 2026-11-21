@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090c13" />
+    <title>Circuit Bastion · 电路堡垒</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-mark">CB</div>
+          <div>
+            <p class="eyebrow">远征模式 · 固定种子 0821</p>
+            <h1>CIRCUIT BASTION</h1>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="status-pill"><i></i><span id="phase-label">准备阶段</span></span>
+          <button class="icon-button" id="save-button" title="保存本地进度">↧</button>
+          <button class="icon-button" id="replay-button" title="导出回放">↗</button>
+        </div>
+      </header>
+
+      <section class="resource-strip" aria-label="系统资源">
+        <div class="resource-card"><span class="resource-icon charge">ϟ</span><div><small>电荷</small><strong id="charge-value">46</strong></div><span class="resource-delta">+8 / 波</span></div>
+        <div class="resource-card"><span class="resource-icon structure">◇</span><div><small>结构点</small><strong id="structure-value">12</strong></div><span class="resource-delta">容量 18</span></div>
+        <div class="resource-card"><span class="resource-icon sample">✣</span><div><small>样本</small><strong id="sample-value">09</strong></div><span class="resource-delta">固件解锁</span></div>
+        <div class="resource-card wide"><span class="resource-icon energy">◒</span><div class="meter-copy"><small>能源峰值</small><strong id="energy-value">72 / 100</strong></div><div class="meter"><span id="energy-meter" style="width:72%"></span></div></div>
+        <div class="resource-card wide"><span class="resource-icon heat">♨</span><div class="meter-copy"><small>系统温度</small><strong id="heat-value">38°</strong></div><div class="meter heat-meter"><span id="heat-meter" style="width:38%"></span></div></div>
+      </section>
+
+      <section class="game-layout">
+        <aside class="panel sidebar left-sidebar">
+          <div class="panel-header"><div><span class="section-kicker">WAVE CONTROL</span><h2>波次调度</h2></div><span class="wave-count" id="wave-count">03 / 10</span></div>
+          <div class="wave-progress"><span id="wave-progress"></span></div>
+          <div class="next-wave-card">
+            <div class="next-wave-label"><span>下一波预测</span><span class="threat-badge" id="threat-label">威胁 Ⅲ</span></div>
+            <h3 id="next-wave-name">干扰脉冲</h3>
+            <p id="next-wave-desc">携带“干扰”标签，首个目标会让一条线路延迟。</p>
+            <div class="enemy-preview" id="enemy-preview"></div>
+          </div>
+          <div class="route-card">
+            <div class="route-heading"><span>入侵路线</span><span id="route-status">稳定</span></div>
+            <div class="route-line"><span class="route-node entry">IN</span><span class="route-segment"></span><span class="route-node core">CORE</span></div>
+            <div class="route-meta"><span>预计抵达 00:18</span><span>2 个分支</span></div>
+          </div>
+          <div class="panel-header small"><h3>波次清单</h3><span class="muted">点击复盘</span></div>
+          <div class="wave-list" id="wave-list"></div>
+          <div class="legend-block">
+            <div class="panel-header small"><h3>连接图例</h3></div>
+            <div class="legend"><span><i class="legend-line signal"></i>信号</span><span><i class="legend-line power"></i>能源</span><span><i class="legend-line cooling"></i>冷却</span></div>
+          </div>
+        </aside>
+
+        <section class="center-stage">
+          <div class="stage-toolbar">
+            <div class="stage-title"><span class="section-kicker">LIVE CIRCUIT</span><h2>北环防线 <span>·</span> 试验地图</h2></div>
+            <div class="stage-actions"><button class="ghost-button" id="filter-button">◌ 仅显示信号</button><button class="ghost-button" id="reset-button">↺ 重置布局</button></div>
+          </div>
+          <div class="battlefield-wrap">
+            <div class="battlefield" id="battlefield" aria-label="电路堡垒网格"></div>
+            <div class="field-overlay top-left">GRID 08 × 06</div>
+            <div class="field-overlay bottom-right" id="sim-time">T+ 00:00.0</div>
+            <div class="field-toast" id="field-toast">准备就绪 · 请选择模块放置</div>
+          </div>
+          <div class="simulation-controls">
+            <button class="primary-button" id="start-button"><span>▶</span> 锁定方案并启动</button>
+            <button class="pause-button" id="pause-button" disabled>Ⅱ</button>
+            <div class="speed-controls" aria-label="模拟速度"><span>速度</span><button data-speed="1" class="speed active">1×</button><button data-speed="2" class="speed">2×</button><button data-speed="4" class="speed">4×</button></div>
+            <span class="control-hint" id="control-hint">准备阶段 · 可拖放模块、编辑规则</span>
+          </div>
+        </section>
+
+        <aside class="panel sidebar right-sidebar">
+          <div class="panel-header"><div><span class="section-kicker">MODULE INSPECTOR</span><h2>模块检查器</h2></div><span class="port-count" id="port-count">3 端口</span></div>
+          <div class="selected-module" id="selected-module">
+            <div class="module-symbol pulse">⌁</div><div><h3 id="selected-name">脉冲炮</h3><p id="selected-type">执行模块 · 单体高伤害</p></div><span class="module-health">100%</span>
+          </div>
+          <div class="inspector-stats" id="inspector-stats"><div><span>伤害</span><b>28</b></div><div><span>冷却</span><b>2.4s</b></div><div><span>功耗</span><b>14</b></div></div>
+          <div class="inspector-section"><div class="section-row"><h3>端口连接</h3><button class="text-button" id="link-button">编辑</button></div><div class="port-list" id="port-list"></div></div>
+          <div class="inspector-section rules-section"><div class="section-row"><h3>规则槽 <span class="slot-count">2 / 3</span></h3><button class="text-button" id="check-rules">静态检查</button></div><div id="rules-list"></div><button class="add-rule" id="add-rule">＋ 添加规则</button><p class="rule-hint" id="rule-hint">规则按优先级从上到下执行，循环触发上限为 4 次。</p></div>
+          <div class="inspector-section firmware-section"><div class="section-row"><h3>固件分支</h3><span class="muted">选择 1 项</span></div><div class="firmware-list" id="firmware-list"></div></div>
+        </aside>
+      </section>
+
+      <section class="bottom-layout">
+        <div class="panel shop-panel"><div class="panel-header"><div><span class="section-kicker">MODULE MARKET</span><h2>模块商店</h2></div><div class="shop-actions"><span id="shop-refresh-cost">刷新 2 ϟ</span><button class="ghost-button" id="refresh-shop">↻ 换一批</button></div></div><div class="shop-grid" id="shop-grid"></div><div class="shop-footer"><span>同名模块 3 个可重构为 <b>Ⅱ</b> 级模块</span><button class="merge-button" id="merge-button">◇ 重构模块</button></div></div>
+        <div class="panel event-panel"><div class="panel-header"><div><span class="section-kicker">EVENT TRACE</span><h2>事件追踪</h2></div><span class="event-count" id="event-count">0 events</span></div><div class="event-list" id="event-list"></div></div>
+      </section>
+      <footer class="footer"><span>v0.1.0 · Deterministic simulation</span><span id="save-status">本地存档已启用</span><span>键盘 <kbd>Space</kbd> 暂停 <kbd>1</kbd><kbd>2</kbd><kbd>4</kbd> 调速</span></footer>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
