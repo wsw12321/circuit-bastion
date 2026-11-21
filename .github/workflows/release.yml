@@ -4,15 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      - 'release/**'
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  package:
+  portable:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -20,33 +17,118 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Resolve release version
-        id: release
+      - name: Build portable Node package
+        run: bash scripts/package-release.sh "$GITHUB_REF_NAME"
+
+      - name: Upload portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-bastion-portable
+          path: dist/circuit-bastion-${{ github.ref_name }}.zip
+          if-no-files-found: error
+
+  sea:
+    name: SEA ${{ matrix.platform }} ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x64
+            executable: circuit-bastion-linux-x64
+          - os: macos-13
+            platform: macos
+            arch: x64
+            executable: circuit-bastion-macos-x64
+          - os: macos-14
+            platform: macos
+            arch: arm64
+            executable: circuit-bastion-macos-arm64
+          - os: windows-2022
+            platform: windows
+            arch: x64
+            executable: circuit-bastion-windows-x64.exe
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install SEA tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        run: npm run check
+
+      - name: Build SEA executable
+        env:
+          SEA_NAME: circuit-bastion-${{ matrix.platform }}-${{ matrix.arch }}
+          SEA_OUTPUT_DIR: dist/sea
+        run: npm run build:sea
+
+      - name: Smoke test SEA executable
+        run: node scripts/smoke-sea.mjs "dist/sea/${{ matrix.executable }}"
+
+      - name: Upload SEA executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-bastion-sea-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/sea/${{ matrix.executable }}
+          if-no-files-found: error
+
+  publish:
+    needs: [portable, sea]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: false
+
+      - name: Assemble platform archives
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            release_tag="$GITHUB_REF_NAME"
-          else
-            release_tag="${GITHUB_REF_NAME#release/}"
-          fi
-          [[ "$release_tag" == v* ]] || { echo "Expected a v* release tag, got $release_tag" >&2; exit 1; }
-          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+          mkdir -p release-dist
+          cp release-assets/circuit-bastion-portable/*.zip release-dist/
 
-      - name: Build portable release package
-        run: bash scripts/package-release.sh "${{ steps.release.outputs.tag }}"
+          for artifact_dir in release-assets/circuit-bastion-sea-*; do
+            executable=$(find "$artifact_dir" -maxdepth 1 -type f -print -quit)
+            artifact_name=$(basename "$artifact_dir")
+            platform_arch=${artifact_name#circuit-bastion-sea-}
+            package_name="circuit-bastion-${platform_arch}"
+            package_dir="release-dist/${package_name}"
+            mkdir -p "$package_dir"
+            cp "$executable" "$package_dir/"
+            cp README.md RUNNING.md "$package_dir/"
+            chmod +x "$package_dir/$(basename "$executable")" 2>/dev/null || true
+            (
+              cd release-dist
+              zip -qr "${package_name}.zip" "$package_name"
+            )
+          done
 
-      - name: Create or update GitHub Release
+      - name: Create GitHub Release and upload archives
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          set -euo pipefail
-          archive="dist/circuit-bastion-${RELEASE_TAG}.zip"
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" "${archive}" --clobber
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-dist/*.zip --clobber
           else
-            gh release create "${RELEASE_TAG}" "${archive}" \
-              --title "Circuit Bastion ${RELEASE_TAG}" \
+            gh release create "$GITHUB_REF_NAME" release-dist/*.zip \
+              --title "Circuit Bastion ${GITHUB_REF_NAME}" \
               --generate-notes
           fi

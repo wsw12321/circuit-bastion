@@ -23,30 +23,12 @@ if ! command -v zip >/dev/null 2>&1; then
 fi
 
 mkdir -p "$package_dir" "$dist_dir"
-for file in index.html styles.css app.js server.mjs package.json README.md; do
+for file in index.html styles.css app.js server.mjs package.json README.md RUNNING.md; do
   cp "$root_dir/$file" "$package_dir/$file"
 done
 if [[ -f "$root_dir/package-lock.json" ]]; then
   cp "$root_dir/package-lock.json" "$package_dir/package-lock.json"
 fi
-
-cat > "$package_dir/RUNNING.md" <<'EOF'
-# Running the portable build
-
-The release package needs Node.js 18 or newer and does not include `node_modules`.
-
-## macOS and Linux
-
-```bash
-./launch.sh
-```
-
-## Windows
-
-Double-click `launch.cmd`, or run it from Command Prompt.
-
-Open `http://127.0.0.1:4173/` after the server starts. Stop the server with `Ctrl+C`.
-EOF
 
 cat > "$package_dir/launch.sh" <<'EOF'
 #!/usr/bin/env bash

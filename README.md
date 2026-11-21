@@ -383,3 +383,15 @@
 ## 17. 项目状态
 
 当前仓库保存的是概念设计稿。具体数值、视觉风格、技术栈和内容规模将在最小可行版本的原型测试后确定。
+
+## 18. 运行与发行
+
+开发环境需要 Node.js 18 或更高版本：
+
+```bash
+npm ci
+npm run check
+npm start
+```
+
+推送 `v*` 标签后，GitHub Actions 会构建 Windows x64、Linux x64、macOS x64 和 macOS arm64 的 Node.js SEA 独立可执行文件，并同时上传一个不含 Node.js 的便携 Node 包作为 fallback。各平台下载包的运行方式记录在 [RUNNING.md](RUNNING.md) 中。

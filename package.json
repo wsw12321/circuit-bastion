@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check app.js && node --check server.mjs",
+    "check": "node --check app.js && node --check server.mjs && node --check sea-entry.cjs && node --check scripts/build-sea.mjs && node --check scripts/smoke-sea.mjs",
+    "build:sea": "node scripts/build-sea.mjs",
     "package:release": "bash scripts/package-release.sh"
+  },
+  "devDependencies": {
+    "postject": "^1.0.0-alpha.6"
   }
 }
