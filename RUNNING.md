@@ -35,3 +35,21 @@ npm ci
 npm run build:sea
 node scripts/smoke-sea.mjs dist/sea/circuit-bastion-<platform>-<arch>
 ```
+
+## Godot 4 desktop vertical slice
+
+Install Godot 4.3 or newer, then launch the project root. The desktop build uses
+`scenes/main.tscn`, `scripts/game_root.gd`, `godot/battle_view.gd`, and the
+deterministic core in `scripts/simulation.gd`.
+
+```bash
+godot4 --path .
+```
+
+Headless validation is available for CI or servers without a display:
+
+```bash
+godot4 --headless --path . --scene res://scenes/main.tscn --quit-after 2 \
+  --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+godot4 --headless --path . --script scripts/simulation_probe.gd
+```

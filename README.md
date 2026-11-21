@@ -382,7 +382,7 @@
 
 ## 17. 项目状态
 
-当前仓库保存的是概念设计稿。具体数值、视觉风格、技术栈和内容规模将在最小可行版本的原型测试后确定。
+当前仓库同时保存设计稿、Node.js 参考原型和 Godot 4 桌面垂直切片。Godot 版本优先验证战场阅读、确定性事件链与模块编排体验，内容数值仍会随着垂直切片测试调整。
 
 ## 18. 运行与发行
 
@@ -395,3 +395,25 @@ npm start
 ```
 
 推送 `v*` 标签后，GitHub Actions 会构建 Windows x64、Linux x64、macOS x64 和 macOS arm64 的 Node.js SEA 独立可执行文件，并同时上传一个不含 Node.js 的便携 Node 包作为 fallback。各平台下载包的运行方式记录在 [RUNNING.md](RUNNING.md) 中。
+
+## 19. Godot 4 桌面垂直切片
+
+桌面游戏版本使用 Godot 4，主场景位于 `scenes/main.tscn`，入口脚本为 `scripts/game_root.gd`。它提供深色科幻控制台、8×6 电路战场、三类线路、模块端口与规则卡片、波次节奏、事件追踪和暂停/倍速交互。确定性模拟位于 `scripts/simulation.gd`，视图位于 `godot/battle_view.gd`，两者通过快照与命令连接。
+
+安装 Godot 4 后运行：
+
+```bash
+godot4 --path . --editor
+# 或直接启动桌面垂直切片
+godot4 --path .
+```
+
+无显示环境可进行脚本检查：
+
+```bash
+godot4 --headless --path . --scene res://scenes/main.tscn --quit-after 2 --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+# 确定性模拟冒烟测试
+godot4 --headless --path . --script scripts/simulation_probe.gd
+```
+
+仓库中的 Node.js 页面仍保留用于设计稿对照和发行包 fallback，桌面垂直切片是后续玩法实现的主技术方向。
