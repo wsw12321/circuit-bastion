@@ -883,7 +883,7 @@ func _gui_input(event: InputEvent) -> void:
 				_pointer_release(event.position)
 	elif event is InputEventScreenTouch:
 		active_touch_ids[event.index] = event.position if event.pressed else active_touch_ids.get(event.index, Vector2.ZERO)
-		var camera_handled := _forward_camera_input(event)
+		_forward_camera_input(event)
 		if event.pressed:
 			if active_touch_ids.size() > 1:
 				touch_gesture_active = true
