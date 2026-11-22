@@ -27,6 +27,7 @@ var _ornament_root: Node3D
 var _status_material: StandardMaterial3D
 var _pulse := 0.0
 var _visual_kind := ""
+var _rotation_index := 0
 
 func _ready() -> void:
 	collision_layer = MODULE_COLLISION_LAYER
@@ -64,6 +65,9 @@ func configure(state: Dictionary, world_position: Vector3) -> void:
 		kind = next_kind
 		_build_visuals()
 	global_position = world_position
+	_rotation_index = posmod(int(state.get("rotation", _rotation_index)), 4)
+	if _visual_root != null:
+		_visual_root.rotation.y = float(_rotation_index) * PI * 0.5
 	var grid: Dictionary = state.get("grid", {})
 	grid_position = Vector2i(int(grid.get("x", grid_position.x)), int(grid.get("y", grid_position.y)))
 	var level := maxi(1, int(state.get("level", 1)))

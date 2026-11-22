@@ -16,6 +16,10 @@ var pinch_distance := -1.0
 
 func _ready() -> void:
 	super._ready()
+	# Mobile has a dedicated touch-first bottom bar. The desktop overlay would
+	# otherwise duplicate controls and collapse the usable battlefield height.
+	if ui_overlay != null:
+		ui_overlay.visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	queue_redraw()
 
@@ -26,7 +30,7 @@ func _draw() -> void:
 	_draw_mobile(size)
 
 func _draw_mobile(size: Vector2) -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", 0.58))
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", 0.18 if use_3d_battlefield else 0.58))
 	_draw_mobile_top_bar(size)
 	var metrics := _mobile_grid(size)
 	var board: Rect2 = metrics["board"]
@@ -34,24 +38,30 @@ func _draw_mobile(size: Vector2) -> void:
 	var cell_size: float = metrics["cell_size"]
 	# Keep silhouettes, labels, and health bars legible across narrow phones.
 	character_scale = clampf(cell_size / 56.0, 0.62, 1.0)
-	draw_rect(board, Color("#091923", 0.48), true)
-	draw_rect(board, Color("#1c3c4b"), false, 1.0)
-	draw_rect(Rect2(board.position + Vector2(7, 7), board.size - Vector2(14, 14)), Color("#112b36"), false, 1.0)
+	var battlefield_alpha := 0.10 if use_3d_battlefield else 0.48
+	draw_rect(board, Color("#091923", battlefield_alpha), true)
+	draw_rect(board, Color("#1c3c4b", 0.72 if use_3d_battlefield else 1.0), false, 1.0)
+	if not use_3d_battlefield:
+		draw_rect(Rect2(board.position + Vector2(7, 7), board.size - Vector2(14, 14)), Color("#112b36"), false, 1.0)
 	draw_string(ThemeDB.fallback_font, board.position + Vector2(14, 25), "SECTOR 07 / TOUCH GRID", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7e8ed"))
 	draw_string(ThemeDB.fallback_font, board.position + Vector2(board.size.x - 142, 25), "TICK %06d" % int(snapshot.get("tick", 0)), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#6f929f"))
-	for row in GRID_ROWS:
-		for column in GRID_COLUMNS:
-			var cell := Vector2i(column, row)
-			var rect := Rect2(origin + Vector2(column, row) * cell_size + Vector2(2, 2), Vector2(cell_size - 4, cell_size - 4))
-			var fill := Color("#173745") if cell == hover_cell else Color("#0d222c")
-			draw_rect(rect, fill, true)
-			draw_rect(rect, Color("#1b3b48"), false, 1.0)
-	_draw_routes(origin, cell_size)
-	_draw_board_markers(origin, cell_size)
+	if use_3d_battlefield:
+		_draw_3d_overlay(board)
+	if not use_3d_battlefield:
+		for row in GRID_ROWS:
+			for column in GRID_COLUMNS:
+				var cell := Vector2i(column, row)
+				var rect := Rect2(origin + Vector2(column, row) * cell_size + Vector2(2, 2), Vector2(cell_size - 4, cell_size - 4))
+				var fill := Color("#173745") if cell == hover_cell else Color("#0d222c")
+				draw_rect(rect, fill, true)
+				draw_rect(rect, Color("#1b3b48"), false, 1.0)
+		_draw_routes(origin, cell_size)
+		_draw_board_markers(origin, cell_size)
 	if not use_3d_battlefield:
 		_draw_modules(origin, cell_size)
 		_draw_enemies(origin, cell_size)
-	draw_string(ThemeDB.fallback_font, board.position + Vector2(14, board.size.y - 13), "点按格子选择模块 · 路由 %s" % (route_focus if route_focus != "" else "SIGNAL"), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7697a4"))
+	var board_hint := "点按 3D 模块部署 · 双指旋转/缩放" if use_3d_battlefield else "点按格子选择模块 · 路由 %s" % (route_focus if route_focus != "" else "SIGNAL")
+	draw_string(ThemeDB.fallback_font, board.position + Vector2(14, board.size.y - 13), board_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7697a4"))
 	_draw_mobile_bottom_bar(size)
 
 func _draw_mobile_top_bar(size: Vector2) -> void:
@@ -275,6 +285,9 @@ func _zoom_battle_camera(delta: float) -> void:
 
 func _cell_at_mobile(position: Vector2) -> Vector2i:
 	var metrics := _mobile_grid(get_rect().size)
+	var board: Rect2 = metrics["board"]
+	if use_3d_battlefield:
+		return _cell_at_3d(position, board)
 	var cell_size: float = metrics["cell_size"]
 	if cell_size <= 0.0:
 		return Vector2i(-1, -1)
