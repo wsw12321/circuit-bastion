@@ -1002,5 +1002,100 @@ func _event_at(position: Vector2, size: Vector2) -> int:
 	return -1
 
 
+
+func _consume_new_events() -> void:
+	for event_value in events:
+		if not event_value is Dictionary:
+			continue
+		var event: Dictionary = event_value
+		var key := "%s|%s|%s|%s" % [
+			str(event.get("sequence", "")),
+			str(event.get("time", "")),
+			str(event.get("type", event.get("kind", ""))),
+			str(event.get("text", event.get("message", ""))),
+		]
+		if seen_event_keys.has(key):
+			continue
+		seen_event_keys[key] = true
+		_consume_event(event)
+	if seen_event_keys.size() > 512:
+		seen_event_keys.clear()
+
+func _consume_event(event: Dictionary) -> void:
+	var kind := str(event.get("kind", event.get("type", ""))).to_lower()
+	var message := str(event.get("text", event.get("message", "")))
+	var payload_value = event.get("payload", {})
+	var payload: Dictionary = payload_value if payload_value is Dictionary else {}
+	match kind:
+		"action":
+			if message.find("命中") >= 0:
+				route_flash = 1.0
+				route_flash_color = Color("#ffca62")
+				_spawn_fx("attack", event, Color("#ffca62"), 0.78)
+				_spawn_fx("hit", event, Color("#fff2c4"), 0.52)
+		"enemy_destroyed":
+			_spawn_fx("hit", event, Color("#68e3bf"), 0.60)
+		"breach":
+			route_flash = 1.0
+			route_flash_color = Color("#ff6b75")
+			_spawn_fx("breach", event, Color("#ff6b75"), 0.86)
+		"overheat":
+			_spawn_fx("overheat", event, Color("#ff8a5b"), 0.95)
+		"disconnect":
+			_spawn_fx("disconnect", event, Color("#ff6b75"), 0.88)
+		"reconnect":
+			_spawn_fx("reconnect", event, Color("#68e3bf"), 0.70)
+		"wave":
+			var wave := int(payload.get("wave", snapshot.get("wave", 1)))
+			_start_wave_banner("WAVE %02d  INCOMING" % wave, Color("#b690ff"))
+		"victory":
+			_start_wave_banner("SYSTEM VICTORY", Color("#68e3bf"))
+			_start_result_transition("victory")
+		"defeat":
+			_start_wave_banner("CORE BREACHED", Color("#ff6b75"))
+			_start_result_transition("defeat")
+		_:
+			if message.find("过热") >= 0:
+				_spawn_fx("overheat", event, Color("#ff8a5b"), 0.95)
+
+func _spawn_fx(kind: String, event: Dictionary, color: Color, duration: float) -> void:
+	var payload_value = event.get("payload", {})
+	var payload: Dictionary = payload_value if payload_value is Dictionary else {}
+	fx_items.append({
+		"kind": kind,
+		"age": 0.0,
+		"duration": duration,
+		"color": color,
+		"source": str(event.get("source", "")),
+		"target": str(event.get("target", "")),
+		"progress": clampf(float(payload.get("progress", 0.62)), 0.0, 1.0),
+	})
+
+func _update_fx(delta: float) -> void:
+	for index in range(fx_items.size() - 1, -1, -1):
+		var fx: Dictionary = fx_items[index]
+		fx.age = float(fx.get("age", 0.0)) + delta
+		if float(fx.age) > float(fx.get("duration", 0.5)):
+			fx_items.remove_at(index)
+		else:
+			fx_items[index] = fx
+	wave_banner_time = maxf(0.0, wave_banner_time - delta)
+	result_transition_time += delta
+
+func _start_wave_banner(text: String, color: Color) -> void:
+	wave_banner_text = text
+	wave_banner_color = color
+	wave_banner_time = 2.2
+
+func _start_result_transition(result: String) -> void:
+	result_transition_time = 0.0
+	if result == "victory":
+		wave_banner_text = "SYSTEM VICTORY"
+		wave_banner_color = Color("#68e3bf")
+	else:
+		wave_banner_text = "CORE BREACHED"
+		wave_banner_color = Color("#ff6b75")
+	wave_banner_time = 3.0
+
 func _cell_center(origin: Vector2, cell_size: float, cell: Vector2i) -> Vector2:
 	return origin + (Vector2(cell) + Vector2(0.5, 0.5)) * cell_size
