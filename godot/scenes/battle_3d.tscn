@@ -1,0 +1,20 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://gameplay/world/battle_world_3d.gd" id="1_world"]
+[ext_resource type="Script" path="res://godot/battle_camera_3d.gd" id="2_camera"]
+
+[node name="Battlefield3D" type="Node3D"]
+script = ExtResource("1_world")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+current = true
+script = ExtResource("2_camera")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, -25, 0)
+light_energy = 1.2
+
+[node name="FillLight" type="OmniLight3D" parent="."]
+position = Vector3(0, 5, 3)
+omni_range = 24.0
+light_energy = 0.6
