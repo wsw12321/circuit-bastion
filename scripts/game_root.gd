@@ -1,10 +1,11 @@
 extends Node
-## Thin composition root for the desktop vertical slice.
-## It wires the deterministic simulation to the hand-drawn BattleView and keeps
-## presentation free from game-state mutation.
+## Thin composition root for the desktop and Android vertical slice.
+## It wires the deterministic simulation to the platform-specific BattleView
+## while keeping presentation free from game-state mutation.
 
 const SIMULATION_SCRIPT := preload("res://scripts/simulation.gd")
 const BATTLE_VIEW_SCRIPT := preload("res://godot/battle_view.gd")
+const MOBILE_BATTLE_VIEW_SCRIPT := preload("res://godot/mobile_battle_view.gd")
 
 var simulation: RefCounted
 var view: Control
@@ -12,7 +13,10 @@ var view_events: Array[Dictionary] = []
 
 func _ready() -> void:
 	simulation = SIMULATION_SCRIPT.new(2048)
-	view = BATTLE_VIEW_SCRIPT.new()
+	var view_script: Script = BATTLE_VIEW_SCRIPT
+	if OS.has_feature("mobile"):
+		view_script = MOBILE_BATTLE_VIEW_SCRIPT
+	view = view_script.new()
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(view)
 	simulation.event_recorded.connect(_on_event_recorded)

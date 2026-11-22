@@ -1,0 +1,129 @@
+name: Android
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'godot/**'
+      - 'scripts/**'
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Android ARM64 APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          yes | sdkmanager --licenses >/dev/null || true
+
+      - name: Install Godot editor and export templates
+        shell: bash
+        env:
+          GODOT_VERSION: 4.3
+          GODOT_RELEASE: 4.3-stable
+        run: |
+          set -euo pipefail
+          godot_root="$RUNNER_TEMP/godot"
+          template_root="$HOME/.local/share/godot/export_templates"
+          mkdir -p "$godot_root" "$template_root"
+          curl --fail --retry 3 --location \
+            "https://github.com/godotengine/godot/releases/download/\${GODOT_RELEASE}/Godot_v\${GODOT_VERSION}-stable_linux.x86_64.zip" \
+            --output "$godot_root/editor.zip"
+          unzip -q "$godot_root/editor.zip" -d "$godot_root/editor"
+          mv "$godot_root/editor/Godot_v\${GODOT_VERSION}-stable_linux.x86_64" "$godot_root/godot"
+          chmod +x "$godot_root/godot"
+          curl --fail --retry 3 --location \
+            "https://github.com/godotengine/godot/releases/download/\${GODOT_RELEASE}/Godot_v\${GODOT_VERSION}-stable_export_templates.tpz" \
+            --output "$godot_root/templates.tpz"
+          unzip -q "$godot_root/templates.tpz" -d "$godot_root/templates"
+          template_source="\$(find "$godot_root/templates" -type f -name 'android_debug.apk' -printf '%h\n' | head -n 1)"
+          if [[ -z "$template_source" || ! -d "$template_source" ]]; then
+            echo "Godot Android export template directory was not found" >&2
+            find "$godot_root/templates" -maxdepth 4 -print >&2
+            exit 1
+          fi
+          template_destination="$template_root/\${GODOT_VERSION}.stable"
+          mkdir -p "$template_destination"
+          cp -R "$template_source/." "$template_destination/"
+          test -f "$template_destination/android_debug.apk"
+          echo "GODOT_BIN=$godot_root/godot" >> "$GITHUB_ENV"
+
+      - name: Generate the standard debug keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [[ ! -f "$HOME/.android/debug.keystore" ]]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Run Android headless probe
+        run: |
+          "$GODOT_BIN" --headless --path . --script scripts/android_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+
+      - name: Export Android ARM64 debug APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist/godot
+          "$GODOT_BIN" --headless --path . --export-debug "Android" \
+            dist/godot/circuit-bastion-android-arm64.apk
+          test -s dist/godot/circuit-bastion-android-arm64.apk
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-bastion-godot-android-arm64
+          path: dist/godot/circuit-bastion-android-arm64.apk
+          if-no-files-found: error
+
+      - name: Attach APK to the tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in \$(seq 1 20); do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              gh release upload "$GITHUB_REF_NAME" \
+                dist/godot/circuit-bastion-android-arm64.apk --clobber
+              exit 0
+            fi
+            sleep 15
+          done
+          gh release create "$GITHUB_REF_NAME" \
+            dist/godot/circuit-bastion-android-arm64.apk \
+            --title "Circuit Bastion $GITHUB_REF_NAME" --generate-notes
