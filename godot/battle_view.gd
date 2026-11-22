@@ -51,6 +51,14 @@ var enemy_last_state: Dictionary = {}
 var enemy_hit_flash: Dictionary = {}
 var enemy_death_effects: Array = []
 var art_tick := -1
+var fx_items: Array = []
+var seen_event_keys: Dictionary = {}
+var wave_banner_time := 0.0
+var wave_banner_text := ""
+var wave_banner_color := Color("#b690ff")
+var result_transition_time := 0.0
+var previous_finished := false
+var previous_victory := false
 
 var modules: Array = [
 	{"id": "scanner", "name": "探针", "cell": Vector2i(1, 1), "color": Color("#5ed6ff"), "load": 0.22},
