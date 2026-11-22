@@ -524,6 +524,14 @@ func _update_modules() -> void:
 		module.cooldown_left = maxf(0.0, float(module.cooldown_left) - FIXED_STEP)
 		if module.kind == "heat_sink":
 			module.heat = maxi(0, int(module.heat) - 1)
+			for connection in connections:
+				if connection.to != module_id or connection.kind != "heat" or not modules.has(connection.from):
+					continue
+				var cooled: Dictionary = modules[connection.from]
+				cooled.heat = maxi(0, int(cooled.heat) - 3)
+				if bool(cooled.disabled) and int(cooled.heat) <= 55:
+					cooled.disabled = false
+					_emit_event("reconnect", module_id, connection.from, "散热恢复线路", {"heat": cooled.heat})
 		if module.kind == "repair_arm":
 			if module.cooldown_left <= 0.0 and base_integrity < 100:
 				base_integrity = mini(100, base_integrity + 2)
@@ -541,9 +549,14 @@ func _update_modules() -> void:
 			target.speed_multiplier = 0.6
 		else:
 			target.hp = maxi(0, int(target.hp) - damage)
-		module.heat = mini(int(module.heat_limit), int(module.heat) + int(module.get("heat", 0)))
+		module.heat = mini(int(module.heat_limit), int(module.heat) + int(module.get("heat_rate", 0)))
 		module.cooldown_left = float(module.cooldown)
-		_emit_event("action", module_id, target_id, "%s 命中 %s" % [module.label, target.label], {"damage": damage, "hp": target.hp})
+		_emit_event("action", module_id, target_id, "%s 命中 %s" % [module.label, target.label], {"damage": damage, "hp": target.hp, "heat": module.heat})
+		if int(module.heat) >= int(module.heat_limit):
+			module.disabled = true
+			module.cooldown_left = maxf(float(module.cooldown), 1.2)
+			_emit_event("overheat", module_id, target_id, "%s 过热，线路断开" % module.label, {"heat": module.heat, "heat_limit": module.heat_limit})
+			_emit_event("disconnect", module_id, target_id, "%s 输出线路断开" % module.label, {"reason": "overheat"})
 		if int(target.hp) <= 0:
 			enemies.erase(target_id)
 			charge += 4
