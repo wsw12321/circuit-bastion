@@ -227,7 +227,7 @@ func _sync_modules(items: Array) -> void:
 			actor = _create_module_actor(module_id)
 			module_nodes[module_id] = actor
 		var cell_value = item.get("cell", Vector2i.ZERO)
-		var cell := cell_value if cell_value is Vector2i else Vector2i(int(cell_value.get("x", 0)), int(cell_value.get("y", 0)))
+		var cell: Vector2i = cell_value if cell_value is Vector2i else Vector2i(int(cell_value.get("x", 0)), int(cell_value.get("y", 0)))
 		actor.position = cell_to_world(cell) + Vector3(0.0, 0.28, 0.0)
 		actor.rotation.y = deg_to_rad(float(item.get("rotation", 0)) * 90.0)
 		var color_value = item.get("color", Color("#72d7ff"))
@@ -347,11 +347,11 @@ func _input(event: InputEvent) -> void:
 			_rotate_camera(event.position - previous)
 		elif touches.size() >= 2:
 			var points: Array = touches.values()
-			var distance := points[0].distance_to(points[1])
+			var distance: float = points[0].distance_to(points[1])
 			if touch_previous_distance > 0.0:
 				_set_zoom(camera_zoom + (touch_previous_distance - distance) * 0.018)
 			touch_previous_distance = distance
-			var angle := (points[1] - points[0]).angle()
+			var angle: float = (points[1] - points[0]).angle()
 			_rotate_camera(Vector2(rad_to_deg(angle - touch_previous_angle) * 0.55, 0.0))
 			touch_previous_angle = angle
 
