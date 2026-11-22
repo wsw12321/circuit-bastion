@@ -238,7 +238,7 @@ func _query_collisions() -> void:
 			continue
 		for module_id in module_areas.keys():
 			var area = module_areas[module_id]
-			if is_instance_valid(area) and actor.global_position.distance_to(area.global_position) <= area.contact_radius + actor.hit_radius:
+			if is_instance_valid(area) and not area.is_destroyed() and actor.global_position.distance_to(area.global_position) <= area.contact_radius + actor.hit_radius:
 				touched["%s:%s" % [enemy_id, module_id]] = enemy_id
 		if is_inside_tree() and get_world_3d() != null:
 			var query_shape := SphereShape3D.new()
@@ -262,7 +262,7 @@ func _register_hit(enemy_id: String, module_id: String) -> void:
 	if float(_hit_cooldowns.get(key, 0.0)) > 0.0 or simulation == null:
 		return
 	var area = module_areas.get(module_id)
-	if area == null or not is_instance_valid(area):
+	if area == null or not is_instance_valid(area) or area.is_destroyed():
 		return
 	var enemy_state: Dictionary = _state_map(simulation.get_snapshot().get("enemies", {})).get(enemy_id, {})
 	var damage := maxi(1, int(enemy_state.get("damage", 1)))
