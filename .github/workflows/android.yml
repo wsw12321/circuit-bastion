@@ -2,6 +2,15 @@ name: Android
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'godot/**'
+      - 'scripts/**'
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - '.github/workflows/android.yml'
   pull_request:
     paths:
       - 'godot/**'
