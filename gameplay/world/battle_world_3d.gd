@@ -236,7 +236,7 @@ func _query_collisions() -> void:
 		if not is_instance_valid(actor):
 			continue
 		for module_id in module_areas.keys():
-			var area: BastionModuleArea3D = module_areas[module_id]
+			var area = module_areas[module_id]
 			if is_instance_valid(area) and actor.global_position.distance_to(area.global_position) <= area.contact_radius + actor.hit_radius:
 				touched["%s:%s" % [enemy_id, module_id]] = enemy_id
 		if is_inside_tree() and get_world_3d() != null:
