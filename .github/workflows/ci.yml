@@ -83,6 +83,7 @@ jobs:
           "$GODOT_BIN" --headless --path . --script scripts/audio_feedback_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/native_motion_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           PERF_BUDGET_MS=5000 "$GODOT_BIN" --headless --path . --script scripts/performance_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/resource_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 
@@ -120,5 +121,6 @@ jobs:
           "$GODOT_BIN" --headless --path . --script scripts/qa_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/native_motion_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/performance_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/resource_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility

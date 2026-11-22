@@ -39,3 +39,9 @@ The required smoke probes are intentionally explicit because Godot can return
 success after a script load failure. `godot_smoke.gd` checks scene instantiation,
 `simulation_probe.gd` checks deterministic replay and save/load, and `qa_smoke.gd`
 checks pause, speed, and wave progression.
+
+## Native world contract
+
+The deterministic simulation owns deployment and movement through direct command methods. Its event log is telemetry for UI, audio, replay, and diagnostics. It is not an input table for changing module state.
+
+The headless native motion probe instantiates Godot Node2D, CharacterBody2D, StaticBody2D, and CollisionShape2D nodes. It checks collision response, bounded smooth movement substeps, and a deployed module node with a collision shape. Desktop CI, Android validation, and release Godot checks run this probe.
