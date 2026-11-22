@@ -23,6 +23,8 @@ var _collision_body: StaticBody3D
 var _visual_root: Node3D
 var _health_fill: MeshInstance3D
 var _core_light: OmniLight3D
+var _ornament_root: Node3D
+var _status_material: StandardMaterial3D
 var _pulse := 0.0
 var _visual_kind := ""
 
@@ -87,14 +89,19 @@ func _build_visuals() -> void:
 	var tint := _tint()
 	_mesh_material = StandardMaterial3D.new()
 	_mesh_material.albedo_color = tint
+	_mesh_material.roughness = 0.38
+	_mesh_material.metallic = 0.32
 	_mesh_material.emission_enabled = true
 	_mesh_material.emission = tint * 0.16
 	_mesh_material.emission_energy_multiplier = 1.0
 	_core_material = StandardMaterial3D.new()
 	_core_material.albedo_color = Color("#fff0b8")
+	_core_material.roughness = 0.22
+	_core_material.metallic = 0.12
 	_core_material.emission_enabled = true
 	_core_material.emission = tint
 	_core_material.emission_energy_multiplier = 2.4
+	_status_material = _flat_material(tint, tint)
 
 	var base := MeshInstance3D.new()
 	base.name = "ModuleBase"
@@ -130,6 +137,11 @@ func _build_visuals() -> void:
 	core.scale = Vector3(1.0, 1.15, 1.0)
 	core.material_override = _core_material
 	_visual_root.add_child(core)
+
+	_ornament_root = Node3D.new()
+	_ornament_root.name = "ModuleOrnaments"
+	_visual_root.add_child(_ornament_root)
+	_add_kind_geometry(tint)
 
 	var stem := MeshInstance3D.new()
 	stem.name = "ModuleStem"
@@ -175,6 +187,132 @@ func _build_visuals() -> void:
 	_core_light.light_energy = 0.7
 	_visual_root.add_child(_core_light)
 
+func _add_kind_geometry(tint: Color) -> void:
+	## Give each module a silhouette that communicates its role at a glance.
+	## These are intentionally low-poly primitives so the Android GL renderer
+	## does not need texture imports or shader variants.
+	if _ornament_root == null:
+		return
+	match kind:
+		"scanner":
+			var dish := MeshInstance3D.new()
+			dish.name = "ScannerDish"
+			var dish_mesh := CylinderMesh.new()
+			dish_mesh.top_radius = 0.34
+			dish_mesh.bottom_radius = 0.12
+			dish_mesh.height = 0.10
+			dish_mesh.radial_segments = 12
+			dish.mesh = dish_mesh
+			dish.position = Vector3(0.0, 0.45, 0.0)
+			dish.rotation_degrees.x = -18.0
+			dish.material_override = _core_material
+			_ornament_root.add_child(dish)
+			_add_pole(Vector3(0.0, 0.34, 0.0), 0.32, _mesh_material)
+			_add_arc_ring("ScannerRing", 0.55, 0.43, 0.07, _status_material)
+		"router":
+			_add_hub_arms(tint)
+			_add_arc_ring("RouterRing", 0.62, 0.55, 0.055, _core_material)
+		"pulse_cannon", "railgun":
+			var barrel := MeshInstance3D.new()
+			barrel.name = "CannonBarrel"
+			var barrel_mesh := BoxMesh.new()
+			barrel_mesh.size = Vector3(0.18, 0.18, 0.82)
+			barrel.mesh = barrel_mesh
+			barrel.position = Vector3(0.0, 0.18, 0.42)
+			barrel.material_override = _mesh_material
+			_ornament_root.add_child(barrel)
+			var muzzle := MeshInstance3D.new()
+			muzzle.name = "CannonMuzzle"
+			var muzzle_mesh := CylinderMesh.new()
+			muzzle_mesh.top_radius = 0.18
+			muzzle_mesh.bottom_radius = 0.22
+			muzzle_mesh.height = 0.10
+			muzzle_mesh.radial_segments = 10
+			muzzle.mesh = muzzle_mesh
+			muzzle.position = Vector3(0.0, 0.18, 0.84)
+			muzzle.rotation_degrees.x = 90.0
+			muzzle.material_override = _core_material
+			_ornament_root.add_child(muzzle)
+			_add_arc_ring("CannonRing", 0.48, 0.40, 0.07, _status_material)
+		"heat_sink", "repair_arm":
+			for index in range(3):
+				var fin := MeshInstance3D.new()
+				fin.name = "CoolingFin_%d" % index
+				var fin_mesh := BoxMesh.new()
+				fin_mesh.size = Vector3(0.10, 0.46, 0.62)
+				fin.mesh = fin_mesh
+				fin.position = Vector3(-0.26 + float(index) * 0.26, 0.12, 0.0)
+				fin.material_override = _mesh_material
+				_ornament_root.add_child(fin)
+			_add_arc_ring("HeatRing", 0.68, 0.58, 0.055, _status_material)
+		"capacitor", "battery":
+			for index in range(2):
+				var cell := MeshInstance3D.new()
+				cell.name = "CapacitorCell_%d" % index
+				var cell_mesh := CylinderMesh.new()
+				cell_mesh.top_radius = 0.14
+				cell_mesh.bottom_radius = 0.17
+				cell_mesh.height = 0.54
+				cell_mesh.radial_segments = 10
+				cell.mesh = cell_mesh
+				cell.position = Vector3(-0.20 + float(index) * 0.40, 0.08, 0.0)
+				cell.material_override = _mesh_material
+				_ornament_root.add_child(cell)
+			_add_arc_ring("ChargeRing", 0.62, 0.54, 0.05, _core_material)
+		"slow_field":
+			_add_arc_ring("FieldRing", 0.72, 0.62, 0.06, _core_material)
+			_add_arc_ring("FieldRingInner", 0.48, 0.40, 0.04, _status_material)
+		_:
+			_add_pole(Vector3(0.0, 0.32, 0.0), 0.28, _mesh_material)
+
+func _add_pole(base: Vector3, height: float, material: Material) -> void:
+	var pole := MeshInstance3D.new()
+	pole.name = "ModulePole"
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.06
+	mesh.bottom_radius = 0.10
+	mesh.height = height
+	mesh.radial_segments = 8
+	pole.mesh = mesh
+	pole.position = base + Vector3(0.0, height * 0.5, 0.0)
+	pole.material_override = material
+	_ornament_root.add_child(pole)
+
+func _add_hub_arms(tint: Color) -> void:
+	for side in range(4):
+		var arm := MeshInstance3D.new()
+		arm.name = "RouterArm_%d" % side
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.10, 0.10, 0.62)
+		arm.mesh = mesh
+		var angle := float(side) * PI * 0.5
+		arm.position = Vector3(sin(angle) * 0.28, 0.16, cos(angle) * 0.28)
+		arm.rotation.y = angle
+		arm.material_override = _mesh_material
+		_ornament_root.add_child(arm)
+		var node := MeshInstance3D.new()
+		node.name = "RouterNode_%d" % side
+		var node_mesh := SphereMesh.new()
+		node_mesh.radius = 0.10
+		node_mesh.height = 0.20
+		node.mesh = node_mesh
+		node.position = Vector3(sin(angle) * 0.60, 0.18, cos(angle) * 0.60)
+		node.material_override = _core_material
+		_ornament_root.add_child(node)
+
+func _add_arc_ring(node_name: String, outer_radius: float, inner_radius: float, height: float, material: Material) -> void:
+	var ring := MeshInstance3D.new()
+	ring.name = node_name
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = inner_radius
+	mesh.outer_radius = outer_radius
+	mesh.rings = 12
+	mesh.ring_segments = 6
+	ring.mesh = mesh
+	ring.position.y = height
+	ring.material_override = material
+	_ornament_root.add_child(ring)
+
 func _create_health_bar() -> void:
 	var back := MeshInstance3D.new()
 	back.name = "HealthBarBack"
@@ -196,6 +334,8 @@ func _create_health_bar() -> void:
 func _flat_material(color: Color, emission: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
+	material.roughness = 0.34
+	material.metallic = 0.16
 	material.emission_enabled = true
 	material.emission = emission
 	material.emission_energy_multiplier = 1.2
@@ -211,6 +351,8 @@ func _process(delta: float) -> void:
 		core.scale = Vector3(breathe, 1.15 * breathe, breathe)
 	if _core_light != null:
 		_core_light.light_energy = 0.62 + (sin(_pulse) + 1.0) * 0.12
+	if _ornament_root != null:
+		_ornament_root.rotation.y = _pulse * (0.18 if kind in ["router", "slow_field"] else 0.08)
 	if _core_material != null and _core_material.emission_energy_multiplier > 2.5:
 		_core_material.emission_energy_multiplier = maxf(2.4, _core_material.emission_energy_multiplier - delta * 8.0)
 

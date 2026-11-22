@@ -32,9 +32,29 @@ var module_areas: Dictionary = {}
 var _hit_cooldowns: Dictionary = {}
 var _breach_seen: Dictionary = {}
 var _ready_nodes := false
+var _visual_phase := 0.0
+var _signal_route_points: Array[Vector3] = []
+var _energy_route_points: Array[Vector3] = []
+var _signal_packet: MeshInstance3D
+var _energy_packet: MeshInstance3D
+var _entry_portal: MeshInstance3D
 
 func _ready() -> void:
 	_ensure_world_nodes()
+	set_process(true)
+
+func _process(delta: float) -> void:
+	# A pair of low-poly packets makes the authored route feel live even when
+	# the deterministic simulation is paused. They are purely presentational.
+	_visual_phase = fmod(_visual_phase + maxf(delta, 0.0), TAU)
+	if _signal_packet != null and _signal_route_points.size() > 1:
+		_signal_packet.position = _sample_route(_signal_route_points, fmod(_visual_phase * 0.11, 1.0)) + Vector3(0.0, 0.16, 0.0)
+		_signal_packet.scale = Vector3.ONE * (0.88 + sin(_visual_phase * 3.0) * 0.12)
+	if _energy_packet != null and _energy_route_points.size() > 1:
+		_energy_packet.position = _sample_route(_energy_route_points, fmod(_visual_phase * 0.075 + 0.35, 1.0)) + Vector3(0.0, 0.13, 0.0)
+		_energy_packet.scale = Vector3.ONE * (0.90 + sin(_visual_phase * 2.6 + 0.9) * 0.10)
+	if _entry_portal != null:
+		_entry_portal.rotation.y = _visual_phase * 0.32
 
 func setup(value: RefCounted) -> void:
 	simulation = value
@@ -136,17 +156,22 @@ func _create_ground() -> void:
 func _create_route_visuals() -> void:
 	var route_material := _material(Color("#176277"), Color("#28c6dc"), 1.5)
 	var route_glow_material := _material(Color("#0e3140"), Color("#25bcd2"), 0.8)
-	var route_points := [
+	_signal_route_points = [
 		cell_to_world(Vector2i(0, 3)) + Vector3(0.0, -0.22, 0.0),
 		cell_to_world(Vector2i(2, 3)) + Vector3(0.0, -0.22, 0.0),
 		cell_to_world(Vector2i(3, 2)) + Vector3(0.0, -0.22, 0.0),
 		cell_to_world(Vector2i(5, 3)) + Vector3(0.0, -0.22, 0.0),
 		cell_to_world(Vector2i(7, 3)) + Vector3(0.0, -0.22, 0.0),
 	]
-	for index in range(route_points.size() - 1):
-		_add_segment("RouteGlow_%d" % index, route_points[index], route_points[index + 1], 0.28, route_glow_material)
-		_add_segment("RouteRail_%d" % index, route_points[index] + Vector3(0.0, 0.08, 0.0), route_points[index + 1] + Vector3(0.0, 0.08, 0.0), 0.07, route_material)
-	for index in range(route_points.size()):
+	_energy_route_points = [
+		cell_to_world(Vector2i(2, 4)) + Vector3(0.0, -0.18, 0.0),
+		cell_to_world(Vector2i(3, 4)) + Vector3(0.0, -0.18, 0.0),
+		cell_to_world(Vector2i(5, 3)) + Vector3(0.0, -0.18, 0.0),
+	]
+	for index in range(_signal_route_points.size() - 1):
+		_add_segment("RouteGlow_%d" % index, _signal_route_points[index], _signal_route_points[index + 1], 0.28, route_glow_material)
+		_add_segment("RouteRail_%d" % index, _signal_route_points[index] + Vector3(0.0, 0.08, 0.0), _signal_route_points[index + 1] + Vector3(0.0, 0.08, 0.0), 0.07, route_material)
+	for index in range(_signal_route_points.size()):
 		var beacon := MeshInstance3D.new()
 		beacon.name = "RouteBeacon_%d" % index
 		var beacon_mesh := CylinderMesh.new()
@@ -154,9 +179,25 @@ func _create_route_visuals() -> void:
 		beacon_mesh.bottom_radius = 0.20
 		beacon_mesh.height = 0.28
 		beacon.mesh = beacon_mesh
-		beacon.position = route_points[index] + Vector3(0.0, 0.14, 0.0)
+		beacon.position = _signal_route_points[index] + Vector3(0.0, 0.14, 0.0)
 		beacon.material_override = route_material
 		add_child(beacon)
+	_signal_packet = _create_route_packet("SignalPacket", Color("#9ff5ff"))
+	_energy_packet = _create_route_packet("EnergyPacket", Color("#fff0ad"))
+
+	# The entry reads as a portal rather than an unadorned spawn square.
+	_entry_portal = MeshInstance3D.new()
+	_entry_portal.name = "EntryPortal"
+	var portal_mesh := TorusMesh.new()
+	portal_mesh.inner_radius = 0.48
+	portal_mesh.outer_radius = 0.56
+	portal_mesh.rings = 14
+	portal_mesh.ring_segments = 6
+	_entry_portal.mesh = portal_mesh
+	_entry_portal.position = _signal_route_points[0] + Vector3(0.0, 0.20, 0.0)
+	_entry_portal.rotation_degrees.x = 90.0
+	_entry_portal.material_override = _material(Color("#4a1f32"), Color("#ff6b75"), 1.3)
+	add_child(_entry_portal)
 
 func _create_camera() -> void:
 	camera = get_node_or_null("Camera3D")
@@ -306,10 +347,35 @@ func _add_segment(node_name: String, start: Vector3, finish: Vector3, width: flo
 func _material(albedo: Color, emission: Color, energy: float) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = albedo
+	material.roughness = 0.42
+	material.metallic = 0.26
 	material.emission_enabled = true
 	material.emission = emission
 	material.emission_energy_multiplier = energy
 	return material
+
+func _create_route_packet(node_name: String, color: Color) -> MeshInstance3D:
+	var packet := MeshInstance3D.new()
+	packet.name = node_name
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.13 if node_name == "SignalPacket" else 0.10
+	mesh.height = mesh.radius * 2.0
+	mesh.radial_segments = 10
+	mesh.rings = 6
+	packet.mesh = mesh
+	packet.material_override = _material(color, color, 2.2)
+	add_child(packet)
+	return packet
+
+func _sample_route(points: Array[Vector3], progress: float) -> Vector3:
+	if points.is_empty():
+		return Vector3.ZERO
+	if points.size() == 1:
+		return points[0]
+	var segment_count := points.size() - 1
+	var scaled := clampf(progress, 0.0, 0.9999) * float(segment_count)
+	var segment := mini(int(floor(scaled)), segment_count - 1)
+	return points[segment].lerp(points[segment + 1], scaled - float(segment))
 
 func cell_to_world(grid_position: Vector2i) -> Vector3:
 	return BOARD_ORIGIN + Vector3((float(grid_position.x) + 0.5) * CELL_SIZE, 0.0, (float(grid_position.y) + 0.5) * CELL_SIZE)
