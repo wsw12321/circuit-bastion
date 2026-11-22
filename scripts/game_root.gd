@@ -31,6 +31,9 @@ func _process(delta: float) -> void:
 	_push_snapshot()
 
 func _on_event_recorded(event: Dictionary) -> void:
+	var audio_bus := get_node_or_null("/root/AudioFeedback")
+	if audio_bus != null and audio_bus.has_method("emit_simulation_event"):
+		audio_bus.emit_simulation_event(event)
 	var kind := str(event.get("kind", "event"))
 	var palette := {
 		"action": Color("#ffca62"),
@@ -68,6 +71,9 @@ func _on_event_selected(event_index: int) -> void:
 		view.highlight_event(view_events[event_index])
 
 func _on_command_requested(command: String) -> void:
+	var audio_bus := get_node_or_null("/root/AudioFeedback")
+	if audio_bus != null and audio_bus.has_method("emit_feedback"):
+		audio_bus.emit_feedback("button", {"command": command})
 	var parts := command.split(":")
 	if command == "pause" or command == "resume":
 		simulation.set_paused(command == "pause")
