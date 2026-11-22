@@ -13,6 +13,7 @@ signal camera_changed(yaw: float, pitch: float, zoom_distance: float)
 @export_range(0.001, 0.03, 0.001) var orbit_sensitivity := 0.008
 @export_range(0.1, 3.0, 0.05) var wheel_zoom_step := 1.2
 @export_range(0.001, 0.1, 0.001) var pinch_zoom_sensitivity := 0.018
+@export_range(42.0, 72.0, 1.0) var composition_fov := 62.0
 
 var target_zoom_distance := 16.0
 var target_pitch := -0.72
@@ -25,6 +26,10 @@ var _pinch_distance := -1.0
 var _pinch_center := Vector2.ZERO
 
 func _ready() -> void:
+	# A tighter FOV keeps the 8×6 arena readable while leaving the HUD as the
+	# only screen-space layer. It also reduces the apparent drift of outer tiles
+	# when the player orbits at the default zoom.
+	fov = composition_fov
 	target_zoom_distance = zoom_distance
 	target_pitch = pitch
 	target_yaw = yaw

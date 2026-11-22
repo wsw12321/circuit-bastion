@@ -212,9 +212,16 @@ func _create_camera() -> void:
 			camera = CAMERA_SCRIPT.new()
 			camera.name = "BattleCamera3D"
 			add_child(camera)
-	camera.set("target", Vector3(0.0, 0.28, 0.0))
-	camera.set("zoom_distance", 18.0)
-	camera.set("target_zoom_distance", 18.0)
+	# Compose the native board inside the desktop battlefield window instead of
+	# centering it under the right-side inspector. Portrait Android keeps the
+	# world centered and backs the camera away to avoid cropping the corners.
+	var viewport_size := get_viewport().get_visible_rect().size
+	var wide_layout := viewport_size.x / maxf(1.0, viewport_size.y) > 1.25
+	var composition_target := Vector3(1.8, 0.16, 0.0) if wide_layout else Vector3(0.0, 0.16, 0.0)
+	var composition_zoom := 20.0 if wide_layout else 23.0
+	camera.set("target", composition_target)
+	camera.set("zoom_distance", composition_zoom)
+	camera.set("target_zoom_distance", composition_zoom)
 	camera.set("pitch", -0.78)
 	camera.set("target_pitch", -0.78)
 	camera.set("yaw", 0.32)

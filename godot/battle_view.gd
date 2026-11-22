@@ -265,7 +265,10 @@ func highlight_event(event: Dictionary) -> void:
 
 func _draw() -> void:
 	var size := get_rect().size
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", 0.58))
+	# The 3D battlefield owns its depth, grid and route. Keep the Canvas layer
+	# limited to a light glass tint so rotating/zooming the camera cannot leave a
+	# second, screen-locked battlefield floating above the real one.
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", 0.18 if use_3d_battlefield else 0.58))
 	_draw_top_bar(size)
 	_draw_battlefield(size)
 	_draw_right_panel(size)
@@ -304,6 +307,14 @@ func _draw_battlefield(size: Vector2) -> void:
 	var panel_reserve := 0.0 if _is_compact(size) else RIGHT_PANEL_WIDTH + MARGIN * 3.0
 	var area_width := maxf(180.0, size.x - panel_reserve)
 	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - _bottom_bar_height(size) - 40.0)
+	if use_3d_battlefield:
+		# This frame is intentionally translucent. It gives the HUD a stable
+		# reading area without pretending that the 3D tiles share its projection.
+		draw_rect(board, Color("#091923", 0.12), true)
+		draw_rect(board, Color("#1c3c4b", 0.60), false, 1.0)
+		_draw_board_header(board)
+		_draw_3d_overlay(board)
+		return
 	draw_rect(board, Color("#091923", 0.48), true)
 	draw_rect(board, Color("#1c3c4b"), false, 1.0)
 	draw_rect(Rect2(board.position + Vector2(8, 8), board.size - Vector2(16, 16)), Color("#112b36"), false, 1.0)
@@ -329,6 +340,42 @@ func _draw_battlefield(size: Vector2) -> void:
 	_draw_route_fx(origin, cell_size)
 	_draw_path_legend(board)
 
+
+func _draw_3d_overlay(board: Rect2) -> void:
+	var camera := _battle_camera()
+	if camera == null or not camera.has_method("unproject_position") or battle_world == null:
+		return
+	var font := ThemeDB.fallback_font
+	# Selection and build feedback live in the same projected space as the
+	# native meshes, so the markers follow orbit and pinch zoom.
+	for module in modules:
+		var cell := _module_cell(module)
+		if cell.x < 0 or not battle_world.has_method("cell_to_world"):
+			continue
+		var world_position: Vector3 = battle_world.cell_to_world(cell) + Vector3(0.0, 0.08, 0.0)
+		if camera.has_method("is_position_behind") and camera.is_position_behind(world_position):
+			continue
+		var screen_position: Vector2 = camera.unproject_position(world_position)
+		if not board.grow(-20.0).has_point(screen_position):
+			continue
+		var raw_color: Variant = module.get("color", Color("#72d7ff"))
+		var color: Color = raw_color if raw_color is Color else Color(str(raw_color))
+		var selected := str(module.get("id", "")) == selected_module_id
+		if selected:
+			draw_circle(screen_position, 24.0, Color(color, 0.10), true)
+			draw_arc(screen_position, 22.0, -phase, -phase + 4.8, 24, Color(color, 0.92), 2.0)
+			draw_line(screen_position + Vector2(-28, 0), screen_position + Vector2(-18, 0), Color(color, 0.82), 1.0)
+			draw_line(screen_position + Vector2(18, 0), screen_position + Vector2(28, 0), Color(color, 0.82), 1.0)
+			draw_string(font, screen_position + Vector2(-36, 34), str(module.get("name", "模块")), HORIZONTAL_ALIGNMENT_LEFT, 72, 9, Color("#d8e7ea"))
+	if (build_mode or not dragging_module_id.is_empty()) and preview_cell.x >= 0 and battle_world.has_method("cell_to_world"):
+		var preview_world: Vector3 = battle_world.cell_to_world(preview_cell) + Vector3(0.0, 0.11, 0.0)
+		if not camera.has_method("is_position_behind") or not camera.is_position_behind(preview_world):
+			var preview_screen: Vector2 = camera.unproject_position(preview_world)
+			if board.grow(-20.0).has_point(preview_screen):
+				var preview_color := Color("#68e3bf") if preview_valid else Color("#ff6b75")
+				draw_circle(preview_screen, 20.0, Color(preview_color, 0.12), true)
+				draw_arc(preview_screen, 20.0, -phase, -phase + TAU, 28, preview_color, 2.0)
+				draw_string(font, preview_screen + Vector2(-30, 32), "可部署" if preview_valid else "位置冲突", HORIZONTAL_ALIGNMENT_LEFT, 60, 9, preview_color)
 
 func _draw_board_header(board: Rect2) -> void:
 	var font := ThemeDB.fallback_font
@@ -629,22 +676,23 @@ func _draw_right_panel(size: Vector2) -> void:
 	var font := ThemeDB.fallback_font
 	draw_string(font, panel.position + Vector2(18, 28), "系统检查", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#d7e8ed"))
 	draw_string(font, panel.position + Vector2(18, 50), "SELECTED MODULE / PORTS / RULES", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#64848e"))
-	var selected_name := "脉冲炮"
-	for module in modules:
-		if module.get("id", "") == selected_module_id:
-			selected_name = str(module.get("name", selected_name))
-	var card := Rect2(panel.position + Vector2(16, 68), Vector2(panel.size.x - 32, 82))
-	draw_rect(card, Color("#112833"), true)
-	draw_rect(card, Color("#345567"), false, 1.0)
-	draw_circle(card.position + Vector2(28, 40), 15.0, Color("#ffca62", 0.18))
-	draw_circle(card.position + Vector2(28, 40), 11.0, Color("#ffca62"), false, 2.0)
-	draw_string(font, card.position + Vector2(56, 32), selected_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f2d18a"))
-	draw_string(font, card.position + Vector2(56, 53), "执行模块 · Tier 02", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#86a5af"))
-	draw_string(font, card.position + Vector2(56, 70), "功率  4.2 kW     延迟  80 ms", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#a8c0c8"))
-	var sell_rect := Rect2(card.position + Vector2(card.size.x - 74, 12), Vector2(58, 24))
-	draw_rect(sell_rect, Color("#ff6b75", 0.12), true)
-	draw_rect(sell_rect, Color("#ff6b75", 0.55), false, 1.0)
-	draw_string(font, sell_rect.position + Vector2(0, 16), "出售", HORIZONTAL_ALIGNMENT_CENTER, sell_rect.size.x, 10, Color("#ff9aa1"))
+	if not _overlay_is_visible():
+		var selected_name := "脉冲炮"
+		for module in modules:
+			if module.get("id", "") == selected_module_id:
+				selected_name = str(module.get("name", selected_name))
+		var card := Rect2(panel.position + Vector2(16, 68), Vector2(panel.size.x - 32, 82))
+		draw_rect(card, Color("#112833"), true)
+		draw_rect(card, Color("#345567"), false, 1.0)
+		draw_circle(card.position + Vector2(28, 40), 15.0, Color("#ffca62", 0.18))
+		draw_circle(card.position + Vector2(28, 40), 11.0, Color("#ffca62"), false, 2.0)
+		draw_string(font, card.position + Vector2(56, 32), selected_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f2d18a"))
+		draw_string(font, card.position + Vector2(56, 53), "执行模块 · Tier 02", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#86a5af"))
+		draw_string(font, card.position + Vector2(56, 70), "功率  4.2 kW     延迟  80 ms", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#a8c0c8"))
+		var sell_rect := Rect2(card.position + Vector2(card.size.x - 74, 12), Vector2(58, 24))
+		draw_rect(sell_rect, Color("#ff6b75", 0.12), true)
+		draw_rect(sell_rect, Color("#ff6b75", 0.55), false, 1.0)
+		draw_string(font, sell_rect.position + Vector2(0, 16), "出售", HORIZONTAL_ALIGNMENT_CENTER, sell_rect.size.x, 10, Color("#ff9aa1"))
 	draw_string(font, panel.position + Vector2(18, 182), "端口", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#8eb0bb"))
 	_draw_port(panel.position + Vector2(18, 202), "IN / SIGNAL", Color("#42c7ee"), "路由器 · 12 events/s")
 	_draw_port(panel.position + Vector2(18, 232), "OUT / TARGET", Color("#ffca62"), "输出节点 · 1.0×")
@@ -741,16 +789,21 @@ func _draw_bottom_bar(size: Vector2) -> void:
 	var y := size.y - bottom_height
 	draw_rect(Rect2(0, y, size.x, bottom_height), Color("#0b1822"), true)
 	draw_line(Vector2(0, y), Vector2(size.x, y), Color("#1d3b4b"), 1.0)
-	_draw_button(Rect2(MARGIN, y + 20, 118, 38), "暂停" if not paused else "继续", "pause", Color("#ffca62"))
-	_draw_button(Rect2(MARGIN + 128, y + 20, 80, 38), "%d×" % speed, "speed", Color("#72d7ff"))
-	_draw_button(Rect2(MARGIN + 218, y + 20, 118, 38), "事件回放", "replay", Color("#b690ff"))
-	if bool(snapshot.get("finished", false)):
-		_draw_button(Rect2(MARGIN + 346, y + 20, 44, 38), "重试", "retry", Color("#ff6b75"))
-	_draw_shop_slots(y)
-	_draw_bench_strip(y)
+	if not _overlay_is_visible():
+		_draw_button(Rect2(MARGIN, y + 20, 118, 38), "暂停" if not paused else "继续", "pause", Color("#ffca62"))
+		_draw_button(Rect2(MARGIN + 128, y + 20, 80, 38), "%d×" % speed, "speed", Color("#72d7ff"))
+		_draw_button(Rect2(MARGIN + 218, y + 20, 118, 38), "事件回放", "replay", Color("#b690ff"))
+		if bool(snapshot.get("finished", false)):
+			_draw_button(Rect2(MARGIN + 346, y + 20, 44, 38), "重试", "retry", Color("#ff6b75"))
+		_draw_shop_slots(y)
+		_draw_bench_strip(y)
 	var status_color := Color("#68e3bf") if feedback_tone == "ok" else Color("#ffca62") if feedback_tone == "warn" else Color("#6b8d98")
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 440, y + 25), feedback_message, HORIZONTAL_ALIGNMENT_LEFT, 420, 10, status_color)
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 290, y + 43), "确定性种子  CB-07-1842", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#6b8d98"))
+
+
+func _overlay_is_visible() -> bool:
+	return ui_overlay != null and is_instance_valid(ui_overlay) and ui_overlay.visible
 
 
 func _draw_result_banner(size: Vector2) -> void:
@@ -1172,11 +1225,40 @@ func _cell_is_valid(cell: Vector2i, moving_id: String = "") -> bool:
 	return true
 
 
+func _cell_at_3d(position: Vector2, board: Rect2) -> Vector2i:
+	# A 2D grid lookup is only valid before the native world is enabled. Once
+	# the camera can orbit, project the pointer onto the same world plane used by
+	# modules and enemies so clicks keep following the board after rotation and
+	# zoom. The board rect still gates interaction away from HUD panels.
+	if not board.has_point(position):
+		return Vector2i(-1, -1)
+	var camera := _battle_camera()
+	if camera == null or not camera.has_method("project_ray_origin"):
+		return Vector2i(-1, -1)
+	var ray_origin: Vector3 = camera.project_ray_origin(position)
+	var ray_direction: Vector3 = camera.project_ray_normal(position)
+	if absf(ray_direction.y) < 0.0001:
+		return Vector2i(-1, -1)
+	var plane_y := 0.52
+	if battle_world != null and battle_world.has_method("cell_to_world"):
+		plane_y = float(battle_world.cell_to_world(Vector2i.ZERO).y)
+	var distance := (plane_y - ray_origin.y) / ray_direction.y
+	if distance < 0.0:
+		return Vector2i(-1, -1)
+	var world_position := ray_origin + ray_direction * distance
+	if battle_world != null and battle_world.has_method("world_to_cell"):
+		var cell: Vector2i = battle_world.world_to_cell(world_position)
+		return cell if cell.x >= 0 and cell.y >= 0 and cell.x < GRID_COLUMNS and cell.y < GRID_ROWS else Vector2i(-1, -1)
+	return Vector2i(-1, -1)
+
+
 func _cell_at(position: Vector2) -> Vector2i:
 	var size := get_rect().size
 	var panel_reserve := 0.0 if _is_compact(size) else RIGHT_PANEL_WIDTH + MARGIN * 3.0
 	var area_width := maxf(180.0, size.x - panel_reserve)
 	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - _bottom_bar_height(size) - 40.0)
+	if use_3d_battlefield:
+		return _cell_at_3d(position, board)
 	var cell_size: float = maxf(18.0, minf((board.size.x - 40.0) / float(GRID_COLUMNS), (board.size.y - 72.0) / float(GRID_ROWS)))
 	var grid_size := Vector2(cell_size * GRID_COLUMNS, cell_size * GRID_ROWS)
 	var origin := board.position + Vector2((board.size.x - grid_size.x) * 0.5, 44.0)

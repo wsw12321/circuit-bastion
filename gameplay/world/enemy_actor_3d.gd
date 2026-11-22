@@ -28,6 +28,7 @@ var _ornament_root: Node3D
 var _body_material: StandardMaterial3D
 var _eye_material: StandardMaterial3D
 var _health_fill: MeshInstance3D
+var _health_bar_width := 1.18
 var _hit_flash := 0.0
 var _phase := 0.0
 
@@ -271,21 +272,24 @@ func _create_shadow() -> void:
 	add_child(shadow)
 
 func _create_health_bar() -> void:
+	# Fixed-Y billboards keep the bar horizontal and legible while the camera
+	# orbits. The larger boss bar remains readable on narrow Android screens.
+	_health_bar_width = 1.46 if kind == "boss" else 1.18
 	var back := MeshInstance3D.new()
 	back.name = "HealthBarBack"
 	var back_mesh := BoxMesh.new()
-	back_mesh.size = Vector3(0.92, 0.075, 0.045)
+	back_mesh.size = Vector3(_health_bar_width, 0.09, 0.055)
 	back.mesh = back_mesh
 	back.position = Vector3(0.0, 0.88, 0.0)
-	back.material_override = _flat_material(Color("#081116"), Color("#081116"))
+	back.material_override = _health_material(Color("#081116"))
 	_visual_root.add_child(back)
 	_health_fill = MeshInstance3D.new()
 	_health_fill.name = "HealthBarFill"
 	var fill_mesh := BoxMesh.new()
-	fill_mesh.size = Vector3(0.88, 0.052, 0.055)
+	fill_mesh.size = Vector3(_health_bar_width - 0.08, 0.060, 0.065)
 	_health_fill.mesh = fill_mesh
-	_health_fill.position = Vector3(-0.44, 0.88, -0.03)
-	_health_fill.material_override = _flat_material(_tint(), _tint() * 0.8)
+	_health_fill.position = Vector3(-(_health_bar_width - 0.08) * 0.5, 0.88, -0.03)
+	_health_fill.material_override = _health_material(_tint())
 	_visual_root.add_child(_health_fill)
 
 func _create_kind_light() -> void:
@@ -305,6 +309,15 @@ func _flat_material(color: Color, emission: Color) -> StandardMaterial3D:
 	material.emission_enabled = true
 	material.emission = emission
 	material.emission_energy_multiplier = 1.1
+	return material
+
+
+func _health_material(color: Color) -> StandardMaterial3D:
+	var material := _flat_material(color, color * 0.8)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	material.no_depth_test = true
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
 
 func advance(delta: float) -> void:
@@ -348,7 +361,7 @@ func _update_health_bar() -> void:
 		return
 	var ratio := clampf(health / max_health, 0.0, 1.0)
 	_health_fill.scale.x = maxf(0.02, ratio)
-	_health_fill.position.x = -0.44 * (1.0 - ratio)
+	_health_fill.position.x = -(_health_bar_width - 0.08) * 0.5 * (1.0 - ratio)
 
 func get_enemy_id() -> String:
 	return enemy_id
