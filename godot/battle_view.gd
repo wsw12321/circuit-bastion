@@ -864,6 +864,11 @@ func _gui_input(event: InputEvent) -> void:
 		if camera_dragging:
 			_rotate_battle_camera(event.relative)
 			return
+		# Middle/right-button orbit is owned by BattleCamera3D. Forward motion
+		# while its drag latch is active; otherwise only the left-drag path below
+		# would ever reach the camera and desktop orbit would appear unresponsive.
+		if _forward_camera_input(event):
+			return
 		var left_dragging: bool = (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0
 		if left_dragging and not build_mode and dragging_module_id.is_empty() and _cell_at(event.position).x >= 0:
 			camera_dragging = true
@@ -875,8 +880,12 @@ func _gui_input(event: InputEvent) -> void:
 			preview_valid = _cell_is_valid(preview_cell, dragging_module_id)
 		queue_redraw()
 	elif event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			_cancel_interaction("已取消部署")
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			# Forward both halves of the gesture.  Dropping the release event leaves
+			# the camera's orbit latch set forever, so every later mouse motion keeps
+			# rotating the battlefield even after the user lets go of the button.
+			if event.pressed:
+				_cancel_interaction("已取消部署")
 			_forward_camera_input(event)
 			return
 		if event.button_index == MOUSE_BUTTON_MIDDLE or event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:

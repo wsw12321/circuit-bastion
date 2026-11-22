@@ -16,5 +16,6 @@ func _run() -> void:
 		"diagnostics": {"warning_count": 0},
 	})
 	await process_frame
+	view.free()
 	print("LAYOUT_OK portrait=390x844 compact=true")
 	quit(0)
