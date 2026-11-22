@@ -4,7 +4,8 @@ extends Node
 ## presentation free from game-state mutation.
 
 const SIMULATION_SCRIPT := preload("res://scripts/simulation.gd")
-const BATTLE_VIEW_SCRIPT := preload("res://godot/battle_view.gd")
+const DESKTOP_BATTLE_VIEW_SCRIPT := preload("res://godot/battle_view.gd")
+const MOBILE_BATTLE_VIEW_SCRIPT := preload("res://godot/mobile_battle_view.gd")
 const BATTLE_WORLD_SCRIPT := preload("res://gameplay/world/battle_world.gd")
 
 var simulation: RefCounted
@@ -14,13 +15,16 @@ var pending_build_kind := ""
 var pending_bench_index := -1
 var world: Node2D
 
+static func select_view_script(mobile: bool) -> Script:
+	return MOBILE_BATTLE_VIEW_SCRIPT if mobile else DESKTOP_BATTLE_VIEW_SCRIPT
+
 func _ready() -> void:
 	simulation = SIMULATION_SCRIPT.new(2048)
 	world = BATTLE_WORLD_SCRIPT.new()
 	world.name = "BattleWorld"
 	add_child(world)
 	world.setup(simulation)
-	view = BATTLE_VIEW_SCRIPT.new()
+	view = select_view_script(OS.has_feature("mobile") or OS.has_feature("android")).new()
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(view)
 	view.set_simulation(simulation)
