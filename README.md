@@ -424,7 +424,7 @@ README、RUNNING.md 和版本信息。Android job 成功时还会上传
 `circuit-bastion-android-arm64.apk`。这是 arm64 debug-signed APK，适合直接安装到
 Android 设备进行验收。Node.js SEA 与 portable 包继续作为兼容 fallback。
 
-Android 版本使用同一套确定性模拟和触控优先视图。点击商店模块进入部署模式，拖拽模块移动，点按网格确认部署，单指滑动旋转 3D 视角，双指捏合缩放镜头。安装 APK 时只需要允许系统的“安装未知应用”权限，游戏本身不申请网络权限。
+Android 版本使用同一套确定性模拟和触控优先视图。点击商店模块进入部署模式，点按网格确认部署，单指滑动旋转 3D 视角，双指捏合缩放镜头。安装 APK 时只需要允许系统的“安装未知应用”权限，游戏本身不申请网络权限。
 
 仓库中的 Node.js 页面仍保留用于设计稿对照和发行包 fallback，桌面垂直切片是后续玩法实现的主技术方向。
 
