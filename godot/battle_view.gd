@@ -48,6 +48,8 @@ var selected_upgrade_branch := "overclock"
 var feedback_message := "就绪 · 点击商店模块开始部署"
 var feedback_tone := "info"
 var touch_pointer_id := -1
+var active_touch_ids: Dictionary = {}
+var touch_gesture_active := false
 var enemy_hp_cache: Dictionary = {}
 var enemy_last_state: Dictionary = {}
 var enemy_hit_flash: Dictionary = {}
@@ -205,6 +207,13 @@ func _zoom_battle_camera(delta: float) -> void:
 		camera.zoom_by(delta)
 
 
+func _forward_camera_input(event: InputEvent) -> bool:
+	var camera := _battle_camera()
+	if camera == null or not camera.has_method("handle_input"):
+		return false
+	return bool(camera.handle_input(event))
+
+
 func set_snapshot(value: Dictionary) -> void:
 	snapshot = value.duplicate(true)
 	var tick := int(snapshot.get("tick", 0))
@@ -327,6 +336,8 @@ func _draw_board_header(board: Rect2) -> void:
 	draw_string(font, board.position + Vector2(board.size.x - 184, 26), "SIM TICK  %06d" % int(snapshot.get("tick", 1842)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#6f929f"))
 	draw_string(font, board.position + Vector2(18, board.size.y - 42), "ROUTE INTEGRITY  /  96%", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#4d8290"))
 	draw_string(font, board.position + Vector2(board.size.x - 134, board.size.y - 42), "BANDWIDTH 64%", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#4d8290"))
+	var camera_hint := "双指旋转/缩放 · 单指点选/拖动" if _is_compact(get_rect().size) else "中键/右键旋转 · 滚轮缩放"
+	draw_string(font, board.position + Vector2(18, board.size.y - 23), camera_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#60818c"))
 
 
 func _draw_board_markers(origin: Vector2, cell_size: float) -> void:
@@ -864,14 +875,12 @@ func _gui_input(event: InputEvent) -> void:
 			preview_valid = _cell_is_valid(preview_cell, dragging_module_id)
 		queue_redraw()
 	elif event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_MIDDLE:
-			camera_dragging = event.pressed
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			_cancel_interaction("已取消部署")
+			_forward_camera_input(event)
 			return
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-			_zoom_battle_camera(-1.0)
-			return
-		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-			_zoom_battle_camera(1.0)
+		if event.button_index == MOUSE_BUTTON_MIDDLE or event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_forward_camera_input(event)
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
@@ -881,21 +890,42 @@ func _gui_input(event: InputEvent) -> void:
 					camera_dragging = false
 					return
 				_pointer_release(event.position)
-		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			_cancel_interaction("已取消部署")
 	elif event is InputEventScreenTouch:
+		active_touch_ids[event.index] = event.position if event.pressed else active_touch_ids.get(event.index, Vector2.ZERO)
+		_forward_camera_input(event)
 		if event.pressed:
+			if active_touch_ids.size() > 1:
+				touch_gesture_active = true
+				touch_pointer_id = -1
+				dragging_module_id = ""
+				drag_origin_cell = Vector2i(-1, -1)
+				preview_cell = Vector2i(-1, -1)
+				queue_redraw()
+				return
 			touch_pointer_id = event.index
 			_pointer_press(event.position)
 		else:
+			active_touch_ids.erase(event.index)
+			if touch_gesture_active:
+				if active_touch_ids.is_empty():
+					touch_gesture_active = false
+				touch_pointer_id = -1
+				queue_redraw()
+				return
 			if touch_pointer_id == event.index:
 				_pointer_release(event.position)
 				touch_pointer_id = -1
-	elif event is InputEventScreenDrag and event.index == touch_pointer_id:
-		hover_cell = _cell_at(event.position)
-		preview_cell = hover_cell
-		preview_valid = _cell_is_valid(preview_cell, dragging_module_id)
-		queue_redraw()
+	elif event is InputEventScreenDrag:
+		if touch_gesture_active:
+			_forward_camera_input(event)
+			return
+		if _forward_camera_input(event):
+			return
+		if event.index == touch_pointer_id:
+			hover_cell = _cell_at(event.position)
+			preview_cell = hover_cell
+			preview_valid = _cell_is_valid(preview_cell, dragging_module_id)
+			queue_redraw()
 	elif event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event)
 
@@ -1013,6 +1043,7 @@ func _pointer_press(position: Vector2) -> void:
 			else:
 				feedback_message = "位置冲突 · 请选择空闲网格"
 				feedback_tone = "warn"
+				_trigger_screen_feedback(0.34, 0.24)
 			queue_redraw()
 			return
 		selected_cell = cell
@@ -1035,9 +1066,11 @@ func _pointer_release(position: Vector2) -> void:
 		command_requested.emit("move:%s:%d:%d" % [dragging_module_id, target.x, target.y])
 		feedback_message = "移动 %s → [%d,%d]" % [dragging_module_id, target.x, target.y]
 		feedback_tone = "ok"
+		_trigger_screen_feedback(0.12, 0.10)
 	elif target != drag_origin_cell:
 		feedback_message = "移动被阻止 · 目标网格不可用"
 		feedback_tone = "warn"
+		_trigger_screen_feedback(0.34, 0.24)
 	dragging_module_id = ""
 	drag_origin_cell = Vector2i(-1, -1)
 	preview_cell = target
