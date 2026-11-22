@@ -30,13 +30,35 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
 
       - name: Install Android SDK packages
         shell: bash
         run: |
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
           yes | sdkmanager --licenses >/dev/null || true
+          for required_path in \
+            "cmdline-tools" \
+            "platform-tools" \
+            "platforms/android-34" \
+            "build-tools/34.0.0" \
+            "cmake/3.10.2.4988404" \
+            "ndk/23.2.8568313"; do
+            test -d "$ANDROID_SDK_ROOT/$required_path"
+          done
+
+      - name: Validate Android workflow YAML contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "uses: android-actions/setup-android@v4" .github/workflows/android.yml
+          grep -Fq "packages: ''" .github/workflows/android.yml
+          if grep -Eq "([[:space:]]|^)tools([[:space:]]|$)" .github/workflows/android.yml; then
+            echo "obsolete Android SDK tools package requested" >&2
+            exit 1
+          fi
 
       - name: Install Godot editor and export templates
         shell: bash
