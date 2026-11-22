@@ -57,7 +57,7 @@ jobs:
             --output "$godot_root/templates.tpz"
           unzip -q "$godot_root/templates.tpz" -d "$godot_root/templates"
           template_source="$(find "$godot_root/templates" -type f -name 'linux_release.x86_64' -printf '%h\n' | while IFS= read -r candidate; do
-            if [[ -f "$candidate/windows_release.x86_64.exe" ]]; then
+            if [[ -f "$candidate/windows_release_x86_64.exe" ]]; then
               printf '%s\n' "$candidate"
               break
             fi
@@ -78,7 +78,7 @@ jobs:
           mkdir -p "$template_destination"
           cp -R "$template_source/." "$template_destination/"
           test -f "$template_destination/linux_release.x86_64"
-          test -f "$template_destination/windows_release.x86_64.exe"
+          test -f "$template_destination/windows_release_x86_64.exe"
           echo "GODOT_BIN=$godot_root/godot" >> "$GITHUB_ENV"
 
       - name: Run Godot headless smoke checks
