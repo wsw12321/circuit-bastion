@@ -228,7 +228,7 @@ func highlight_event(event: Dictionary) -> void:
 
 func _draw() -> void:
 	var size := get_rect().size
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017"))
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", 0.58))
 	_draw_top_bar(size)
 	_draw_battlefield(size)
 	_draw_right_panel(size)
@@ -238,7 +238,7 @@ func _draw() -> void:
 
 
 func _draw_top_bar(size: Vector2) -> void:
-	draw_rect(Rect2(0, 0, size.x, TOP_BAR_HEIGHT), Color("#0b1822"))
+	draw_rect(Rect2(0, 0, size.x, TOP_BAR_HEIGHT), Color("#0b1822", 0.82))
 	draw_line(Vector2(0, TOP_BAR_HEIGHT - 1), Vector2(size.x, TOP_BAR_HEIGHT - 1), Color("#1d3b4b"), 1.0)
 	var font := ThemeDB.fallback_font
 	if _is_compact(size):
@@ -267,7 +267,7 @@ func _draw_battlefield(size: Vector2) -> void:
 	var panel_reserve := 0.0 if _is_compact(size) else RIGHT_PANEL_WIDTH + MARGIN * 3.0
 	var area_width := maxf(180.0, size.x - panel_reserve)
 	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - _bottom_bar_height(size) - 40.0)
-	draw_rect(board, Color("#091923"), true)
+	draw_rect(board, Color("#091923", 0.48), true)
 	draw_rect(board, Color("#1c3c4b"), false, 1.0)
 	draw_rect(Rect2(board.position + Vector2(8, 8), board.size - Vector2(16, 16)), Color("#112b36"), false, 1.0)
 	var cell_size: float = maxf(18.0, minf((board.size.x - 40.0) / float(GRID_COLUMNS), (board.size.y - 72.0) / float(GRID_ROWS)))
@@ -279,7 +279,7 @@ func _draw_battlefield(size: Vector2) -> void:
 		for column in GRID_COLUMNS:
 			var cell := Vector2i(column, row)
 			var rect := Rect2(origin + Vector2(column, row) * cell_size + Vector2(3, 3), Vector2(cell_size - 6, cell_size - 6))
-			var fill := Color("#0d222c") if cell != hover_cell else Color("#173745")
+			var fill := Color("#0d222c", 0.32) if cell != hover_cell else Color("#173745", 0.52)
 			if (build_mode or not dragging_module_id.is_empty()) and cell == preview_cell:
 				fill = Color("#173e38") if preview_valid else Color("#40222b")
 			draw_rect(rect, fill, true)
