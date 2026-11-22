@@ -5,15 +5,21 @@ extends Node
 
 const SIMULATION_SCRIPT := preload("res://scripts/simulation.gd")
 const BATTLE_VIEW_SCRIPT := preload("res://godot/battle_view.gd")
+const BATTLE_WORLD_SCRIPT := preload("res://gameplay/world/battle_world.gd")
 
 var simulation: RefCounted
 var view: Control
 var view_events: Array[Dictionary] = []
 var pending_build_kind := ""
 var pending_bench_index := -1
+var world: Node2D
 
 func _ready() -> void:
 	simulation = SIMULATION_SCRIPT.new(2048)
+	world = BATTLE_WORLD_SCRIPT.new()
+	world.name = "BattleWorld"
+	add_child(world)
+	world.setup(simulation)
 	view = BATTLE_VIEW_SCRIPT.new()
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(view)
@@ -23,11 +29,15 @@ func _ready() -> void:
 	view.command_requested.connect(_on_command_requested)
 	view.event_selected.connect(_on_event_selected)
 	_seed_modules()
+	world.sync_snapshot(simulation.get_snapshot())
 	simulation.start_battle()
+	world.sync_snapshot(simulation.get_snapshot())
 	_push_snapshot()
 
 func _process(delta: float) -> void:
 	simulation.advance(delta)
+	world.sync_snapshot(simulation.get_snapshot())
+	world.step_world(delta)
 	_push_snapshot()
 
 func _on_event_recorded(event: Dictionary) -> void:
@@ -64,6 +74,7 @@ func _on_event_recorded(event: Dictionary) -> void:
 	_push_snapshot()
 
 func _on_state_changed(_state: Dictionary) -> void:
+	world.sync_snapshot(_state)
 	_push_snapshot()
 
 func _on_event_selected(event_index: int) -> void:
@@ -89,13 +100,13 @@ func _on_command_requested(command: String) -> void:
 		var bench_items: Array = simulation.get_bench()
 		for bench_index in range(bench_items.size() - 1, -1, -1):
 			if str(bench_items[bench_index].get("kind", "")) == build_kind:
-				build_id = str(simulation.deploy_bench_item(bench_index, build_cell, build_rotation))
+				build_id = str(world.deploy_bench_item_at_cell(bench_index, build_cell, build_rotation))
 				break
 		if build_id.is_empty():
-			build_id = str(simulation.build_module(build_kind, build_cell, build_rotation))
+			build_id = str(world.deploy_module_at_cell(build_kind, build_cell, build_rotation))
 		pending_build_kind = "" if not build_id.is_empty() else pending_build_kind
 	elif parts.size() >= 4 and parts[0] == "move":
-		simulation.move_module(str(parts[1]), Vector2i(int(parts[2]), int(parts[3])))
+		world.move_module_to_cell(str(parts[1]), Vector2i(int(parts[2]), int(parts[3])))
 	elif parts.size() >= 3 and parts[0] == "rotate":
 		if simulation.has_method("set_module_rotation"):
 			simulation.set_module_rotation(str(parts[1]), int(parts[2]))
@@ -115,7 +126,7 @@ func _on_command_requested(command: String) -> void:
 				view_events.push_front({"time": "SHOP", "type": "PREP", "text": "选择 %s · 点击网格部署" % pending_build_kind, "color": Color("#b690ff")})
 	elif parts.size() >= 2 and parts[0] == "bench":
 		if parts[1] == "deploy" and parts.size() >= 6:
-			simulation.deploy_bench_item(int(parts[2]), Vector2i(int(parts[3]), int(parts[4])), int(parts[5]))
+			world.deploy_bench_item_at_cell(int(parts[2]), Vector2i(int(parts[3]), int(parts[4])), int(parts[5]))
 		elif parts[1] == "discard" and parts.size() >= 3:
 			simulation.discard_bench_item(int(parts[2]))
 	elif parts.size() == 2 and parts[0] == "upgrade":
@@ -125,6 +136,7 @@ func _on_command_requested(command: String) -> void:
 			simulation.upgrade_module(selected, str(branch))
 	elif command == "retry":
 		simulation.retry_battle()
+	world.sync_snapshot(simulation.get_snapshot())
 	_push_snapshot()
 
 func _push_snapshot() -> void:
