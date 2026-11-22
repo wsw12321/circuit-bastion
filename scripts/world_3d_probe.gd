@@ -34,6 +34,8 @@ func _run() -> void:
 	camera.zoom_by(-3.0)
 	if not _assert(camera.get_zoom_distance() < zoom_before, "camera zoom should reduce distance"):
 		return
+	if not _assert(camera.global_position.y > 0.0, "camera should remain above the battlefield"):
+		return
 
 	var simulation = Simulation.new(7331)
 	var module_id: String = simulation.add_module("scanner", Vector2i(0, 3))
@@ -67,7 +69,9 @@ func _run() -> void:
 		return
 	if not _assert(hit_count >= 1, "3D collision query should emit a hit"):
 		return
-	print("WORLD_3D_OK camera=orbit-zoom actors=%d hits=%d" % [world.get_enemy_actor_count(), hit_count])
+	var actor_count := world.get_enemy_actor_count()
+	instance.free()
+	print("WORLD_3D_OK camera=orbit-zoom actors=%d hits=%d" % [actor_count, hit_count])
 	quit(0)
 
 func _on_enemy_hit(_enemy_id: String, _module_id: String, _damage: int) -> void:

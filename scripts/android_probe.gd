@@ -21,6 +21,14 @@ func _run() -> void:
 		if not preset_text.contains(required):
 			_fail("missing Android preset field: " + required)
 			return
+	var project_version := str(ProjectSettings.get_setting("application/config/version", ""))
+	if project_version.is_empty():
+		_fail("project version is missing")
+		return
+	var expected_version := 'version/name="%s"' % project_version
+	if not preset_text.contains(expected_version):
+		_fail("Android version does not match project version: " + project_version)
+		return
 	var sdk_root := OS.get_environment("ANDROID_SDK_ROOT")
 	var sdk_probe_enabled := OS.get_environment("CIRCUIT_BASTION_ANDROID_SDK_PROBE") == "1"
 	if sdk_probe_enabled:

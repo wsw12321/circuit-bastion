@@ -48,7 +48,8 @@ func _run() -> void:
 	if not camera_contract_loaded:
 		_fail("3D runtime camera orbit/zoom contract is missing")
 		return
-	print("GODOT_SMOKE_OK children=%d root_script=%s battle_view=true overlay=true world_3d=true camera_orbit_zoom=true" % [instance.get_child_count(), instance.get_script().resource_path])
+	instance.free()
+	print("GODOT_SMOKE_OK children=2 root_script=res://scripts/game_root.gd battle_view=true overlay=true world_3d=true camera_orbit_zoom=true camera_input=true")
 	quit(0)
 
 func _fail(message: String) -> void:

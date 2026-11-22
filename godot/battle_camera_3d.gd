@@ -3,13 +3,13 @@ extends Camera3D
 
 ## Orbit camera with smoothed yaw, pitch, and zoom controls.
 
-@export var target := Vector3(0.0, 0.28, 0.0)
+@export var target := Vector3(0.0, 0.0, 0.0)
 @export_range(4.0, 24.0, 0.1) var zoom_distance := 12.0
-@export_range(-1.3, -0.15, 0.01) var pitch := -0.72
+@export_range(0.15, 1.3, 0.01) var pitch := 0.72
 @export_range(-3.14, 3.14, 0.01) var yaw := 0.35
 
 var target_zoom_distance := 12.0
-var target_pitch := -0.72
+var target_pitch := 0.72
 var target_yaw := 0.35
 var smoothing := 12.0
 
@@ -28,7 +28,7 @@ func _process(delta: float) -> void:
 
 func rotate_orbit(delta: Vector2) -> void:
 	target_yaw = wrapf(target_yaw + delta.x * 0.01, -PI, PI)
-	target_pitch = clampf(target_pitch + delta.y * 0.01, -1.3, -0.15)
+	target_pitch = clampf(target_pitch + delta.y * 0.01, 0.15, 1.3)
 
 func zoom_by(delta: float) -> void:
 	target_zoom_distance = clampf(target_zoom_distance + delta, 4.0, 24.0)
@@ -44,5 +44,6 @@ func get_zoom_distance() -> float:
 
 func _apply_transform() -> void:
 	var horizontal := cos(pitch) * zoom_distance
+	# Negative pitch angles represent an elevated orbit around the target.
 	position = target + Vector3(sin(yaw) * horizontal, -sin(pitch) * zoom_distance, cos(yaw) * horizontal)
 	look_at(target, Vector3.UP)

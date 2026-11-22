@@ -62,34 +62,10 @@ func _ensure_world_nodes() -> void:
 		route_curve.add_point(point)
 	route_path.curve = route_curve
 	add_child(route_path)
-	_create_environment()
 	_create_ground()
-	_create_route_visuals()
 	_create_camera()
 	_create_core_area()
 	_ready_nodes = true
-
-func _create_environment() -> void:
-	var world_environment := WorldEnvironment.new()
-	world_environment.name = "BattleEnvironment"
-	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color("#050b12")
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("#77a9bd")
-	environment.ambient_light_energy = 0.48
-	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.tonemap_exposure = 1.18
-	environment.glow_enabled = true
-	environment.glow_intensity = 0.7
-	environment.glow_bloom = 0.14
-	environment.fog_enabled = true
-	environment.fog_light_color = Color("#102834")
-	environment.fog_density = 0.008
-	environment.fog_height = 0.0
-	environment.fog_height_density = 0.025
-	world_environment.environment = environment
-	add_child(world_environment)
 
 func _create_ground() -> void:
 	var ground := StaticBody3D.new()
@@ -97,100 +73,45 @@ func _create_ground() -> void:
 	ground.collision_layer = 1
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(GRID_COLUMNS * CELL_SIZE + 2.0, 0.5, GRID_ROWS * CELL_SIZE + 2.0)
+	box.size = Vector3(GRID_COLUMNS * CELL_SIZE, 0.2, GRID_ROWS * CELL_SIZE)
 	shape.shape = box
-	shape.position.y = -0.05
+	shape.position.y = -0.1
 	ground.add_child(shape)
-	var deck := MeshInstance3D.new()
-	deck.name = "ArenaDeck"
-	var deck_mesh := BoxMesh.new()
-	deck_mesh.size = box.size
-	deck.mesh = deck_mesh
-	deck.position.y = -0.05
-	deck.material_override = _material(Color("#0b1c27"), Color("#07131b"), 0.18)
-	deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	ground.add_child(deck)
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = box.size
+	mesh_instance.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#102a35")
+	material.emission_enabled = true
+	material.emission = Color("#06131a")
+	mesh_instance.material_override = material
+	ground.add_child(mesh_instance)
 	add_child(ground)
 
-	var tile_material_a := _material(Color("#12313d"), Color("#06131b"), 0.06)
-	var tile_material_b := _material(Color("#102834"), Color("#071721"), 0.08)
-	for row in GRID_ROWS:
-		for column in GRID_COLUMNS:
-			var tile := MeshInstance3D.new()
-			tile.name = "Tile_%d_%d" % [column, row]
-			var tile_mesh := BoxMesh.new()
-			tile_mesh.size = Vector3(CELL_SIZE - 0.08, 0.12, CELL_SIZE - 0.08)
-			tile.mesh = tile_mesh
-			tile.position = cell_to_world(Vector2i(column, row)) + Vector3(0.0, -0.17, 0.0)
-			tile.material_override = tile_material_a if (column + row) % 2 == 0 else tile_material_b
-			tile.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-			add_child(tile)
-
-	var border_material := _material(Color("#1a5361"), Color("#0a2832"), 0.24)
-	for x in range(GRID_COLUMNS + 1):
-		_add_box("BorderX_%d" % x, Vector3(0.06, 0.18, GRID_ROWS * CELL_SIZE + 0.5), Vector3(BOARD_ORIGIN.x + float(x) * CELL_SIZE, 0.16, 0.0), border_material)
-	for z in range(GRID_ROWS + 1):
-		_add_box("BorderZ_%d" % z, Vector3(GRID_COLUMNS * CELL_SIZE + 0.5, 0.18, 0.06), Vector3(0.0, 0.16, BOARD_ORIGIN.z + float(z) * CELL_SIZE), border_material)
-
-func _create_route_visuals() -> void:
-	var route_material := _material(Color("#176277"), Color("#28c6dc"), 1.5)
-	var route_glow_material := _material(Color("#0e3140"), Color("#25bcd2"), 0.8)
-	var route_points := [
-		cell_to_world(Vector2i(0, 3)) + Vector3(0.0, -0.22, 0.0),
-		cell_to_world(Vector2i(2, 3)) + Vector3(0.0, -0.22, 0.0),
-		cell_to_world(Vector2i(3, 2)) + Vector3(0.0, -0.22, 0.0),
-		cell_to_world(Vector2i(5, 3)) + Vector3(0.0, -0.22, 0.0),
-		cell_to_world(Vector2i(7, 3)) + Vector3(0.0, -0.22, 0.0),
-	]
-	for index in range(route_points.size() - 1):
-		_add_segment("RouteGlow_%d" % index, route_points[index], route_points[index + 1], 0.28, route_glow_material)
-		_add_segment("RouteRail_%d" % index, route_points[index] + Vector3(0.0, 0.08, 0.0), route_points[index + 1] + Vector3(0.0, 0.08, 0.0), 0.07, route_material)
-	for index in range(route_points.size()):
-		var beacon := MeshInstance3D.new()
-		beacon.name = "RouteBeacon_%d" % index
-		var beacon_mesh := CylinderMesh.new()
-		beacon_mesh.top_radius = 0.16
-		beacon_mesh.bottom_radius = 0.20
-		beacon_mesh.height = 0.28
-		beacon.mesh = beacon_mesh
-		beacon.position = route_points[index] + Vector3(0.0, 0.14, 0.0)
-		beacon.material_override = route_material
-		add_child(beacon)
-
 func _create_camera() -> void:
-	var camera := CAMERA_SCRIPT.new()
-	camera.name = "BattleCamera3D"
-	camera.target = Vector3(0.0, 0.28, 0.0)
+	var camera = get_node_or_null("Camera3D")
+	if camera == null:
+		camera = CAMERA_SCRIPT.new()
+		camera.name = "BattleCamera3D"
+		add_child(camera)
+	camera.target = Vector3(0.0, 0.0, 0.0)
 	camera.zoom_distance = 18.0
-	camera.pitch = -0.78
-	camera.yaw = 0.32
-	add_child(camera)
+	camera.target_zoom_distance = 18.0
 	camera.current = true
 
-	var key_light := DirectionalLight3D.new()
-	key_light.name = "BattleKeyLight3D"
-	key_light.rotation_degrees = Vector3(-55.0, -28.0, 0.0)
-	key_light.light_color = Color("#b9e5ff")
-	key_light.light_energy = 1.35
-	key_light.shadow_enabled = true
-	key_light.directional_shadow_max_distance = 40.0
-	add_child(key_light)
-
-	var rim_light := DirectionalLight3D.new()
-	rim_light.name = "BattleRimLight3D"
-	rim_light.rotation_degrees = Vector3(-28.0, 148.0, 0.0)
-	rim_light.light_color = Color("#5b7dff")
-	rim_light.light_energy = 0.34
-	rim_light.shadow_enabled = false
-	add_child(rim_light)
-
-	var fill := OmniLight3D.new()
-	fill.name = "BattleFillLight3D"
-	fill.position = Vector3(0.0, 6.0, 3.0)
-	fill.omni_range = 30.0
-	fill.light_color = Color("#4b8fa9")
-	fill.light_energy = 1.1
-	add_child(fill)
+	var directional = get_node_or_null("BattleLight3D")
+	if directional == null:
+		for child in get_children():
+			if child is DirectionalLight3D:
+				directional = child
+				break
+	if directional == null:
+		directional = DirectionalLight3D.new()
+		directional.name = "BattleLight3D"
+		add_child(directional)
+	directional.rotation_degrees = Vector3(-55.0, -25.0, 0.0)
+	directional.light_energy = 1.1
 
 func _create_core_area() -> void:
 	core_hit_area = Area3D.new()
@@ -204,81 +125,6 @@ func _create_core_area() -> void:
 	core_hit_area.position = cell_to_world(Vector2i(7, 3))
 	core_hit_area.add_child(shape)
 	add_child(core_hit_area)
-
-	var pedestal := MeshInstance3D.new()
-	pedestal.name = "CorePedestal"
-	var pedestal_mesh := CylinderMesh.new()
-	pedestal_mesh.top_radius = 0.82
-	pedestal_mesh.bottom_radius = 1.02
-	pedestal_mesh.height = 0.38
-	pedestal.mesh = pedestal_mesh
-	pedestal.position = core_hit_area.position + Vector3(0.0, -0.23, 0.0)
-	pedestal.material_override = _material(Color("#183a42"), Color("#0d6a79"), 0.45)
-	add_child(pedestal)
-
-	var core := MeshInstance3D.new()
-	core.name = "CoreCrystal"
-	var core_mesh := SphereMesh.new()
-	core_mesh.radius = 0.62
-	core_mesh.height = 1.32
-	core_mesh.radial_segments = 20
-	core_mesh.rings = 10
-	core.mesh = core_mesh
-	core.position = core_hit_area.position + Vector3(0.0, 0.62, 0.0)
-	core.scale = Vector3(0.78, 1.15, 0.78)
-	core.material_override = _material(Color("#69e9d1"), Color("#36e8d2"), 2.4)
-	add_child(core)
-
-	var core_light := OmniLight3D.new()
-	core_light.name = "CoreLight"
-	core_light.position = core.position + Vector3(0.0, 0.2, 0.0)
-	core_light.omni_range = 7.0
-	core_light.light_color = Color("#43e5d0")
-	core_light.light_energy = 2.2
-	add_child(core_light)
-
-	for side in range(4):
-		var marker := MeshInstance3D.new()
-		marker.name = "CoreMarker_%d" % side
-		var marker_mesh := BoxMesh.new()
-		marker_mesh.size = Vector3(0.08, 0.16, 0.75)
-		marker.mesh = marker_mesh
-		marker.position = core_hit_area.position + Vector3(0.0, 0.02, 0.0)
-		marker.rotation_degrees.y = float(side) * 90.0
-		marker.material_override = _material(Color("#3adbc9"), Color("#37d9d0"), 1.8)
-		add_child(marker)
-
-func _add_box(node_name: String, size: Vector3, position: Vector3, material: Material) -> MeshInstance3D:
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.name = node_name
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mesh_instance.mesh = mesh
-	mesh_instance.position = position
-	mesh_instance.material_override = material
-	add_child(mesh_instance)
-	return mesh_instance
-
-func _add_segment(node_name: String, start: Vector3, finish: Vector3, width: float, material: Material) -> MeshInstance3D:
-	var segment := MeshInstance3D.new()
-	segment.name = node_name
-	var mesh := BoxMesh.new()
-	var length := start.distance_to(finish)
-	mesh.size = Vector3(width, width, length)
-	segment.mesh = mesh
-	segment.position = start.lerp(finish, 0.5)
-	segment.rotation.y = atan2(finish.x - start.x, finish.z - start.z)
-	segment.material_override = material
-	add_child(segment)
-	return segment
-
-func _material(albedo: Color, emission: Color, energy: float) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = albedo
-	material.emission_enabled = true
-	material.emission = emission
-	material.emission_energy_multiplier = energy
-	return material
 
 func cell_to_world(grid_position: Vector2i) -> Vector3:
 	return BOARD_ORIGIN + Vector3((float(grid_position.x) + 0.5) * CELL_SIZE, 0.0, (float(grid_position.y) + 0.5) * CELL_SIZE)
@@ -384,7 +230,7 @@ func query_modules_near(world_position: Vector3, radius: float) -> Array:
 	var result: Array = []
 	for id in module_areas.keys():
 		var area = module_areas[id]
-		if is_instance_valid(area) and not area.is_destroyed() and area.global_position.distance_to(world_position) <= radius + area.contact_radius:
+		if is_instance_valid(area) and area.global_position.distance_to(world_position) <= radius + area.contact_radius:
 			result.append(str(id))
 	return result
 
@@ -432,9 +278,6 @@ func _register_hit(enemy_id: String, module_id: String) -> void:
 	var enemy_state: Dictionary = _state_map(simulation.get_snapshot().get("enemies", {})).get(enemy_id, {})
 	var damage := maxi(1, int(enemy_state.get("damage", 1)))
 	area.receive_hit(enemy_id, damage)
-	var actor = enemy_bodies.get(enemy_id)
-	if actor != null and is_instance_valid(actor) and actor.has_method("flash_hit"):
-		actor.flash_hit()
 	_hit_cooldowns[key] = 0.35
 	enemy_hit.emit(enemy_id, module_id, damage)
 

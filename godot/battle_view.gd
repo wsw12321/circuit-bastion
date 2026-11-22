@@ -70,6 +70,8 @@ var result_transition_time := 0.0
 var previous_finished := false
 var previous_victory := false
 var ui_overlay: Node
+var battle_world: Node
+var camera_dragging := false
 
 var modules: Array = [
 	{"id": "scanner", "name": "探针", "cell": Vector2i(1, 1), "color": Color("#5ed6ff"), "load": 0.22},
@@ -176,6 +178,31 @@ func _bottom_bar_height(size: Vector2) -> float:
 func set_simulation(value: Object) -> void:
 	simulation = value
 	queue_redraw()
+
+
+func set_battle_world(value: Node) -> void:
+	battle_world = value
+
+
+func _battle_camera() -> Node:
+	if battle_world == null or not is_instance_valid(battle_world):
+		return null
+	var camera = battle_world.get_node_or_null("BattleCamera3D")
+	if camera == null:
+		camera = battle_world.get_node_or_null("Camera3D")
+	return camera
+
+
+func _rotate_battle_camera(delta: Vector2) -> void:
+	var camera := _battle_camera()
+	if camera != null and camera.has_method("rotate_orbit"):
+		camera.rotate_orbit(delta)
+
+
+func _zoom_battle_camera(delta: float) -> void:
+	var camera := _battle_camera()
+	if camera != null and camera.has_method("zoom_by"):
+		camera.zoom_by(delta)
 
 
 func set_snapshot(value: Dictionary) -> void:
@@ -570,7 +597,7 @@ func _draw_path_legend(board: Rect2) -> void:
 	_draw_legend_item(board.position.x + 18, y, Color("#42c7ee"), "信号线")
 	_draw_legend_item(board.position.x + 104, y, Color("#ffca62"), "能源线")
 	_draw_legend_item(board.position.x + 190, y, Color("#ff6b75"), "过热线")
-	draw_string(font, Vector2(board.position.x + board.size.x - 170, y + 4), "点击事件追踪传播路径", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7697a4"))
+	draw_string(font, Vector2(board.position.x + board.size.x - 170, y + 4), "中键拖动视角 · 滚轮缩放", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7697a4"))
 
 
 func _draw_legend_item(x: float, y: float, color: Color, label: String) -> void:
@@ -823,12 +850,24 @@ func _draw_button(rect: Rect2, label: String, command: String, color: Color) -> 
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
+		if camera_dragging:
+			_rotate_battle_camera(event.relative)
+			return
 		hover_cell = _cell_at(event.position)
 		if build_mode or not dragging_module_id.is_empty():
 			preview_cell = hover_cell
 			preview_valid = _cell_is_valid(preview_cell, dragging_module_id)
 		queue_redraw()
 	elif event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_MIDDLE:
+			camera_dragging = event.pressed
+			return
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+			_zoom_battle_camera(-1.0)
+			return
+		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+			_zoom_battle_camera(1.0)
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				_pointer_press(event.position)

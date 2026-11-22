@@ -56,7 +56,10 @@ func _run() -> void:
 		return
 	if not _assert(hit_count >= 0, "3D hit signal contract should remain callable"):
 		return
-	print("WORLD_PHYSICS_3D_OK actors=%d hits=%d modules=%d" % [world.get_enemy_actor_count(), hit_count, world.module_areas.size()])
+	var actor_count := world.get_enemy_actor_count()
+	var module_count := world.module_areas.size()
+	world.free()
+	print("WORLD_PHYSICS_3D_OK actors=%d hits=%d modules=%d" % [actor_count, hit_count, module_count])
 	quit(0)
 
 func _on_enemy_hit(_enemy_id: String, _module_id: String, _damage: int) -> void:
