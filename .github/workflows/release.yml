@@ -357,6 +357,8 @@ jobs:
           (
             cd release-dist
             find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS.txt
+            test "$(wc -l < SHA256SUMS.txt)" -eq 6
+            sha256sum --check SHA256SUMS.txt
           )
 
       - name: Create GitHub Release and upload archives
