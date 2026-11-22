@@ -17,6 +17,7 @@ const TOP_BAR_HEIGHT := 72.0
 const MARGIN := 28.0
 const RIGHT_PANEL_WIDTH := 326.0
 const BOTTOM_BAR_HEIGHT := 84.0
+const CHARACTER_ART := preload("res://godot/character_art.gd")
 
 var simulation: Object
 var snapshot: Dictionary = {}
@@ -45,6 +46,11 @@ var selected_upgrade_branch := "overclock"
 var feedback_message := "就绪 · 点击商店模块开始部署"
 var feedback_tone := "info"
 var touch_pointer_id := -1
+var enemy_hp_cache: Dictionary = {}
+var enemy_last_state: Dictionary = {}
+var enemy_hit_flash: Dictionary = {}
+var enemy_death_effects: Array = []
+var art_tick := -1
 
 var modules: Array = [
 	{"id": "scanner", "name": "探针", "cell": Vector2i(1, 1), "color": Color("#5ed6ff"), "load": 0.22},
@@ -72,6 +78,17 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	phase = fmod(phase + delta * (0.8 if not paused else 0.16), TAU)
 	route_flash = maxf(0.0, route_flash - delta * 1.7)
+	for enemy_id in enemy_hit_flash.keys():
+		var remaining := float(enemy_hit_flash[enemy_id]) - delta * 4.2
+		if remaining <= 0.0:
+			enemy_hit_flash.erase(enemy_id)
+		else:
+			enemy_hit_flash[enemy_id] = remaining
+	for index in range(enemy_death_effects.size() - 1, -1, -1):
+		var effect: Dictionary = enemy_death_effects[index]
+		effect["ttl"] = float(effect.get("ttl", 0.0)) - delta
+		if float(effect.get("ttl", 0.0)) <= 0.0:
+			enemy_death_effects.remove_at(index)
 	if simulation != null and simulation.has_method("get_snapshot"):
 		set_snapshot(simulation.get_snapshot())
 	queue_redraw()
@@ -93,6 +110,7 @@ func set_simulation(value: Object) -> void:
 func set_snapshot(value: Dictionary) -> void:
 	snapshot = value.duplicate(true)
 	var tick := int(snapshot.get("tick", 0))
+	_sync_enemy_art(tick)
 	if last_tick >= 0 and tick != last_tick:
 		route_flash = 1.0
 		route_flash_color = Color("#ffca62") if tick % 3 == 0 else Color("#72d7ff")
@@ -313,25 +331,95 @@ func _draw_enemies(origin: Vector2, cell_size: float) -> void:
 		for enemy_id in enemy_state.keys():
 			var enemy: Dictionary = enemy_state[enemy_id]
 			var progress: float = clampf(float(enemy.get("progress", 0.0)), 0.0, 0.99)
+			var label := str(enemy.get("label", "目标"))
+			var kind := str(enemy.get("kind", _infer_enemy_kind(label)))
 			enemy_list.append({
+				"id": str(enemy_id),
 				"cell": Vector2i(int(progress * 7.0), 3),
-				"hp": float(enemy.get("hp", 1.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0))),
-				"label": str(enemy.get("label", "目标")),
+				"progress": progress,
+				"hp": float(enemy.get("hp", 1.0)),
+				"max_hp": maxf(1.0, float(enemy.get("max_hp", 1.0))),
+				"label": label,
+				"kind": kind,
 			})
 	else:
 		enemy_list = [
-			{"cell": Vector2i(0, 3), "hp": 0.72, "label": "裂隙虫"},
-			{"cell": Vector2i(1, 3), "hp": 0.46, "label": "裂隙虫"},
-			{"cell": Vector2i(2, 3), "hp": 0.88, "label": "侦察蜂"},
+			{"id": "preview_scout", "cell": Vector2i(0, 3), "progress": 0.03, "hp": 25.0, "max_hp": 34.0, "label": "侦察蜂", "kind": "scout"},
+			{"id": "preview_bruiser", "cell": Vector2i(1, 3), "progress": 0.17, "hp": 64.0, "max_hp": 90.0, "label": "破城兽", "kind": "bruiser"},
+			{"id": "preview_phase", "cell": Vector2i(2, 3), "progress": 0.29, "hp": 55.0, "max_hp": 74.0, "label": "相位影", "kind": "phase"},
+			{"id": "preview_jammer", "cell": Vector2i(3, 3), "progress": 0.41, "hp": 48.0, "max_hp": 64.0, "label": "干扰体", "kind": "jammer"},
+			{"id": "preview_leech", "cell": Vector2i(4, 3), "progress": 0.54, "hp": 28.0, "max_hp": 42.0, "label": "虹吸虫", "kind": "leech"},
+			{"id": "preview_splitter", "cell": Vector2i(5, 3), "progress": 0.66, "hp": 40.0, "max_hp": 52.0, "label": "裂变体", "kind": "splitter"},
+			{"id": "preview_boss", "cell": Vector2i(6, 3), "progress": 0.78, "hp": 410.0, "max_hp": 520.0, "label": "熔断主宰", "kind": "boss"},
 		]
 	for enemy in enemy_list:
-		var center := _cell_center(origin, cell_size, enemy.cell) + Vector2(0, -cell_size * 0.25)
-		draw_circle(center, 9.0, Color("#ff6b75"))
-		draw_circle(center, 13.0 + sin(phase * 1.4 + center.x) * 2.0, Color("#ff6b75", 0.12), false, 2.0)
-		var hp_rect := Rect2(center + Vector2(-17, 15), Vector2(34, 4))
+		var kind := str(enemy.get("kind", "scout"))
+		var center := _cell_center(origin, cell_size, enemy.get("cell", Vector2i.ZERO)) + Vector2(0, -cell_size * 0.25)
+		var serial := str(enemy.get("id", "0")).replace("E", "")
+		var lane := 0.0 if not serial.is_valid_int() else float((int(serial) % 3) - 1) * cell_size * 0.11
+		center += Vector2(0, lane)
+		var is_boss := kind == "boss"
+		var art_size := cell_size * (0.47 if is_boss else 0.31)
+		var hit_intensity := float(enemy_hit_flash.get(str(enemy.get("id", "")), 0.0))
+		CHARACTER_ART.draw_enemy(self, center, art_size, kind, "hit" if hit_intensity > 0.0 else "idle", phase, hit_intensity)
+		var hp_ratio := clampf(float(enemy.get("hp", 1.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0))), 0.0, 1.0)
+		var bar_width := 58.0 if is_boss else 34.0
+		var hp_rect := Rect2(center + Vector2(-bar_width * 0.5, art_size * 0.72), Vector2(bar_width, 4))
+		var art_color := CHARACTER_ART.palette(kind)
 		draw_rect(hp_rect, Color("#311d27"), true)
-		draw_rect(Rect2(hp_rect.position, Vector2(hp_rect.size.x * enemy.hp, hp_rect.size.y)), Color("#ff6b75"), true)
-		draw_string(font, center + Vector2(-25, -18), enemy.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#a8c0c8"))
+		draw_rect(Rect2(hp_rect.position, Vector2(hp_rect.size.x * hp_ratio, hp_rect.size.y)), art_color, true)
+		draw_string(font, center + Vector2(-bar_width * 0.5, -art_size * 0.78), str(enemy.get("label", "目标")), HORIZONTAL_ALIGNMENT_LEFT, bar_width, 9 if not is_boss else 10, Color("#e6f2f4") if is_boss else Color("#a8c0c8"))
+		if is_boss:
+			draw_string(font, center + Vector2(-bar_width * 0.5, art_size * 0.96), "BOSS  %02d%%" % int(hp_ratio * 100.0), HORIZONTAL_ALIGNMENT_LEFT, bar_width, 8, Color("#ffca62"))
+	for effect in enemy_death_effects:
+		var death_progress := clampf(float(effect.get("progress", 0.0)), 0.0, 0.99)
+		var death_center := _cell_center(origin, cell_size, Vector2i(int(death_progress * 7.0), 3)) + Vector2(0, -cell_size * 0.25)
+		var death_kind := str(effect.get("kind", "scout"))
+		var death_size := cell_size * (0.47 if death_kind == "boss" else 0.31)
+		var max_ttl := maxf(0.01, float(effect.get("max_ttl", 1.0)))
+		var intensity := clampf(float(effect.get("ttl", 0.0)) / max_ttl, 0.0, 1.0)
+		CHARACTER_ART.draw_death_burst(self, death_center, death_size, death_kind, phase, intensity)
+		draw_string(font, death_center + Vector2(-death_size, death_size * 0.98), str(effect.get("label", "目标")) + " · OFFLINE", HORIZONTAL_ALIGNMENT_LEFT, death_size * 2.0, 8, Color(1.0, 0.83, 0.68, intensity))
+
+func _infer_enemy_kind(label: String) -> String:
+	var labels := {
+		"侦察蜂": "scout",
+		"破城兽": "bruiser",
+		"裂变体": "splitter",
+		"干扰体": "jammer",
+		"虹吸虫": "leech",
+		"相位影": "phase",
+		"熔断主宰": "boss",
+	}
+	return str(labels.get(label, "scout"))
+
+func _sync_enemy_art(tick: int) -> void:
+	if art_tick == tick:
+		return
+	art_tick = tick
+	var current: Dictionary = snapshot.get("enemies", {})
+	for enemy_id in current.keys():
+		var enemy: Dictionary = current[enemy_id]
+		var hp := float(enemy.get("hp", 1.0))
+		if enemy_hp_cache.has(enemy_id) and hp < float(enemy_hp_cache[enemy_id]):
+			enemy_hit_flash[enemy_id] = 1.0
+		enemy_hp_cache[enemy_id] = hp
+		enemy_last_state[enemy_id] = enemy.duplicate(true)
+	for enemy_id in enemy_last_state.keys():
+		if current.has(enemy_id):
+			continue
+		var previous: Dictionary = enemy_last_state[enemy_id]
+		var previous_label := str(previous.get("label", "目标"))
+		enemy_death_effects.append({
+			"progress": clampf(float(previous.get("progress", 0.0)), 0.0, 0.99),
+			"kind": str(previous.get("kind", _infer_enemy_kind(previous_label))),
+			"label": previous_label,
+			"ttl": 1.0,
+			"max_ttl": 1.0,
+		})
+		enemy_last_state.erase(enemy_id)
+		enemy_hp_cache.erase(enemy_id)
+		enemy_hit_flash.erase(enemy_id)
 
 
 func _draw_path_legend(board: Rect2) -> void:
