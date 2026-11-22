@@ -76,15 +76,15 @@ func _build_visuals() -> void:
 	_body_material.roughness = 0.46
 	_body_material.metallic = 0.22
 	_body_material.emission_enabled = true
-	_body_material.emission = _tint() * 0.18
-	_body_material.emission_energy_multiplier = 0.9
+	_body_material.emission = _tint() * 0.12
+	_body_material.emission_energy_multiplier = 0.62
 	_eye_material = StandardMaterial3D.new()
 	_eye_material.albedo_color = Color("#fff3cc")
 	_eye_material.roughness = 0.18
 	_eye_material.metallic = 0.08
 	_eye_material.emission_enabled = true
 	_eye_material.emission = _tint()
-	_eye_material.emission_energy_multiplier = 3.0
+	_eye_material.emission_energy_multiplier = 1.9
 	_ornament_root = Node3D.new()
 	_ornament_root.name = "EnemyOrnaments"
 	_visual_root.add_child(_ornament_root)
@@ -298,7 +298,7 @@ func _create_kind_light() -> void:
 	light.position = Vector3(0.0, 0.24, 0.0)
 	light.omni_range = 2.5 if kind != "boss" else 4.0
 	light.light_color = _tint()
-	light.light_energy = 0.35 if kind != "boss" else 0.8
+	light.light_energy = 0.20 if kind != "boss" else 0.48
 	_visual_root.add_child(light)
 
 func _flat_material(color: Color, emission: Color) -> StandardMaterial3D:
@@ -349,7 +349,7 @@ func _process(delta: float) -> void:
 	if _ornament_root != null:
 		_ornament_root.rotation.y = _phase * (0.20 if kind in ["jammer", "phase"] else 0.06)
 	if _body_material != null:
-		_body_material.emission_energy_multiplier = 1.5 if _hit_flash > 0.0 else 0.9
+		_body_material.emission_energy_multiplier = 1.05 if _hit_flash > 0.0 else 0.62
 
 func flash_hit() -> void:
 	_hit_flash = 1.0

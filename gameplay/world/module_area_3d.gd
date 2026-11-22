@@ -96,15 +96,15 @@ func _build_visuals() -> void:
 	_mesh_material.roughness = 0.38
 	_mesh_material.metallic = 0.32
 	_mesh_material.emission_enabled = true
-	_mesh_material.emission = tint * 0.16
-	_mesh_material.emission_energy_multiplier = 1.0
+	_mesh_material.emission = tint * 0.11
+	_mesh_material.emission_energy_multiplier = 0.68
 	_core_material = StandardMaterial3D.new()
 	_core_material.albedo_color = Color("#fff0b8")
 	_core_material.roughness = 0.22
 	_core_material.metallic = 0.12
 	_core_material.emission_enabled = true
 	_core_material.emission = tint
-	_core_material.emission_energy_multiplier = 2.4
+	_core_material.emission_energy_multiplier = 1.65
 	_status_material = _flat_material(tint, tint)
 
 	var base := MeshInstance3D.new()
@@ -188,7 +188,7 @@ func _build_visuals() -> void:
 	_core_light.position = Vector3(0.0, 0.20, 0.0)
 	_core_light.omni_range = 2.6
 	_core_light.light_color = tint
-	_core_light.light_energy = 0.7
+	_core_light.light_energy = 0.42
 	_visual_root.add_child(_core_light)
 
 func _add_kind_geometry(tint: Color) -> void:
@@ -318,21 +318,25 @@ func _add_arc_ring(node_name: String, outer_radius: float, inner_radius: float, 
 	_ornament_root.add_child(ring)
 
 func _create_health_bar() -> void:
+	# Module bars use the same fixed-Y billboard treatment as enemy bars. This
+	# keeps damage state readable while the camera orbits and avoids the bar
+	# disappearing into the module mesh at steep Android pitch angles.
+	var bar_width := 1.12
 	var back := MeshInstance3D.new()
 	back.name = "HealthBarBack"
 	var back_mesh := BoxMesh.new()
-	back_mesh.size = Vector3(0.92, 0.06, 0.045)
+	back_mesh.size = Vector3(bar_width, 0.08, 0.055)
 	back.mesh = back_mesh
-	back.position = Vector3(0.0, 0.70, 0.0)
-	back.material_override = _flat_material(Color("#071016"), Color("#071016"))
+	back.position = Vector3(0.0, 0.76, 0.0)
+	back.material_override = _health_material(Color("#071016"))
 	_visual_root.add_child(back)
 	_health_fill = MeshInstance3D.new()
 	_health_fill.name = "HealthBarFill"
 	var fill_mesh := BoxMesh.new()
-	fill_mesh.size = Vector3(0.88, 0.042, 0.055)
+	fill_mesh.size = Vector3(bar_width - 0.08, 0.052, 0.065)
 	_health_fill.mesh = fill_mesh
-	_health_fill.position = Vector3(-0.44, 0.70, -0.03)
-	_health_fill.material_override = _flat_material(_tint(), _tint())
+	_health_fill.position = Vector3(-(bar_width - 0.08) * 0.5, 0.76, -0.03)
+	_health_fill.material_override = _health_material(_tint())
 	_visual_root.add_child(_health_fill)
 
 func _flat_material(color: Color, emission: Color) -> StandardMaterial3D:
@@ -343,6 +347,14 @@ func _flat_material(color: Color, emission: Color) -> StandardMaterial3D:
 	material.emission_enabled = true
 	material.emission = emission
 	material.emission_energy_multiplier = 1.2
+	return material
+
+func _health_material(color: Color) -> StandardMaterial3D:
+	var material := _flat_material(color, color * 0.8)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	material.no_depth_test = true
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
 
 func _process(delta: float) -> void:
@@ -388,7 +400,7 @@ func _update_health_bar() -> void:
 		return
 	var ratio := get_health_ratio()
 	_health_fill.scale.x = maxf(0.02, ratio)
-	_health_fill.position.x = -0.44 * (1.0 - ratio)
+	_health_fill.position.x = -(1.12 - 0.08) * 0.5 * (1.0 - ratio)
 
 func _tint() -> Color:
 	if kind == "pulse_cannon" or kind == "railgun":
