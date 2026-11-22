@@ -853,6 +853,11 @@ func _gui_input(event: InputEvent) -> void:
 		if camera_dragging:
 			_rotate_battle_camera(event.relative)
 			return
+		var left_dragging := (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0
+		if left_dragging and not build_mode and dragging_module_id.is_empty() and _cell_at(event.position).x >= 0:
+			camera_dragging = true
+			_rotate_battle_camera(event.relative)
+			return
 		hover_cell = _cell_at(event.position)
 		if build_mode or not dragging_module_id.is_empty():
 			preview_cell = hover_cell
@@ -872,6 +877,9 @@ func _gui_input(event: InputEvent) -> void:
 			if event.pressed:
 				_pointer_press(event.position)
 			else:
+				if camera_dragging:
+					camera_dragging = false
+					return
 				_pointer_release(event.position)
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			_cancel_interaction("已取消部署")
