@@ -6,14 +6,14 @@ extends Node
 const SIMULATION_SCRIPT := preload("res://scripts/simulation.gd")
 const DESKTOP_BATTLE_VIEW_SCRIPT := preload("res://godot/battle_view.gd")
 const MOBILE_BATTLE_VIEW_SCRIPT := preload("res://godot/mobile_battle_view.gd")
-const BATTLE_WORLD_SCRIPT := preload("res://gameplay/world/battle_world.gd")
+const BATTLE_WORLD_SCRIPT := preload("res://gameplay/world/battle_world_3d.gd")
 
 var simulation: RefCounted
 var view: Control
 var view_events: Array[Dictionary] = []
 var pending_build_kind := ""
 var pending_bench_index := -1
-var world: Node2D
+var world: Node3D
 
 static func select_view_script(mobile: bool) -> Script:
 	return MOBILE_BATTLE_VIEW_SCRIPT if mobile else DESKTOP_BATTLE_VIEW_SCRIPT
@@ -41,8 +41,11 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	simulation.advance(delta)
 	world.sync_snapshot(simulation.get_snapshot())
-	world.step_world(delta)
 	_push_snapshot()
+
+func _physics_process(delta: float) -> void:
+	if is_instance_valid(world):
+		world.step_world(delta)
 
 func _on_event_recorded(event: Dictionary) -> void:
 	var audio_bus := get_node_or_null("/root/AudioFeedback")
