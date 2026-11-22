@@ -21,7 +21,7 @@ const ENEMY_COLLISION_LAYER := 2
 const MODULE_COLLISION_LAYER := 4
 
 var simulation: RefCounted
-var camera: BastionBattleCamera3D
+var camera
 var route_path: Path3D
 var route_curve: Curve3D
 var enemy_container: Node3D
