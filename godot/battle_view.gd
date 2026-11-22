@@ -83,12 +83,59 @@ var events: Array = [
 ]
 
 func _ready() -> void:
+	_configure_effects()
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	focus_mode = Control.FOCUS_ALL
 	grab_focus()
 	set_process(true)
 	queue_redraw()
 
+
+func _configure_effects() -> void:
+	var configured_theme := str(ProjectSettings.get_setting("circuit_bastion/effect_theme", effect_theme_id))
+	if configured_theme in ["cyan", "amber", "violet", "mono"]:
+		effect_theme_id = configured_theme
+	low_performance_effects = bool(ProjectSettings.get_setting("circuit_bastion/low_performance_effects", low_performance_effects))
+	if OS.has_feature("mobile") or low_performance_effects:
+		effect_quality = mini(effect_quality, 1)
+	match effect_theme_id:
+		"amber":
+			effect_colors = {
+				"signal": Color("#ffcf70"), "energy": Color("#ffe29a"), "hazard": Color("#ff806e"),
+				"hit": Color("#fff4c2"), "overheat": Color("#ff9b5c"), "breach": Color("#ff5c67"),
+				"success": Color("#96f0c3"), "banner": Color("#ffd166")
+			}
+		"violet":
+			effect_colors = {
+				"signal": Color("#75d9ff"), "energy": Color("#bda4ff"), "hazard": Color("#ff83b7"),
+				"hit": Color("#f6e8ff"), "overheat": Color("#ff9bd0"), "breach": Color("#ff668d"),
+				"success": Color("#83f1d6"), "banner": Color("#c4a7ff")
+			}
+		"mono":
+			effect_colors = {
+				"signal": Color("#d6e3e8"), "energy": Color("#b9c7cc"), "hazard": Color("#8f9ca1"),
+				"hit": Color("#ffffff"), "overheat": Color("#d4d4d4"), "breach": Color("#aeb8bc"),
+				"success": Color("#e4eef1"), "banner": Color("#d6e3e8")
+			}
+		_:
+			effect_colors = {
+				"signal": Color("#42c7ee"), "energy": Color("#ffca62"), "hazard": Color("#ff6b75"),
+				"hit": Color("#fff2c4"), "overheat": Color("#ff8a5b"), "breach": Color("#ff6b75"),
+				"success": Color("#68e3bf"), "banner": Color("#b690ff")
+			}
+
+func set_effect_theme(theme_id: String) -> void:
+	effect_theme_id = theme_id
+	_configure_effects()
+	queue_redraw()
+
+func set_effect_quality(quality: int) -> void:
+	effect_quality = clampi(quality, 0, 2)
+	queue_redraw()
+
+func _effect_color(role: String, fallback: Color) -> Color:
+	var value = effect_colors.get(role, fallback)
+	return value if value is Color else fallback
 
 func _process(delta: float) -> void:
 	phase = fmod(phase + delta * (0.8 if not paused else 0.16), TAU)
