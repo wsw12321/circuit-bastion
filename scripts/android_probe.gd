@@ -21,7 +21,11 @@ func _run() -> void:
 			_fail("missing Android preset field: " + required)
 			return
 	var sdk_root := OS.get_environment("ANDROID_SDK_ROOT")
-	if not sdk_root.is_empty():
+	var sdk_probe_enabled := OS.get_environment("CIRCUIT_BASTION_ANDROID_SDK_PROBE") == "1"
+	if sdk_probe_enabled:
+		if sdk_root.is_empty():
+			_fail("ANDROID_SDK_ROOT is not set for the Android SDK probe")
+			return
 		for required_path in [
 			"cmdline-tools", "platform-tools", "platforms/android-34",
 			"build-tools/34.0.0", "cmake/3.10.2.4988404", "ndk/23.2.8568313",
