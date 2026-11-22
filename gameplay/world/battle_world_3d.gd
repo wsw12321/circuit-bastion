@@ -188,7 +188,7 @@ func sync_snapshot(snapshot: Dictionary) -> void:
 			enemy_bodies.erase(id)
 			stale_enemy.queue_free()
 	for id in modules_state.keys():
-		var area: BastionModuleArea3D = module_areas.get(id)
+		var area = module_areas.get(id)
 		if area == null or not is_instance_valid(area):
 			area = MODULE_AREA_SCRIPT.new()
 			area.name = "ModuleArea3D_%s" % id
@@ -196,7 +196,7 @@ func sync_snapshot(snapshot: Dictionary) -> void:
 			module_areas[id] = area
 		area.configure(modules_state[id], cell_to_world(_state_grid(modules_state[id])))
 	for id in enemies_state.keys():
-		var actor: BastionEnemyActor3D = enemy_bodies.get(id)
+		var actor = enemy_bodies.get(id)
 		if actor == null or not is_instance_valid(actor):
 			actor = ENEMY_ACTOR_SCRIPT.new()
 			actor.name = "EnemyActor3D_%s" % id
@@ -217,7 +217,7 @@ func step_world(delta: float) -> void:
 func query_modules_near(world_position: Vector3, radius: float) -> Array:
 	var result: Array = []
 	for id in module_areas.keys():
-		var area: BastionModuleArea3D = module_areas[id]
+		var area = module_areas[id]
 		if is_instance_valid(area) and area.global_position.distance_to(world_position) <= radius + area.contact_radius:
 			result.append(str(id))
 	return result
@@ -232,7 +232,7 @@ func get_enemy_position(enemy_id: String) -> Vector3:
 func _query_collisions() -> void:
 	var touched: Dictionary = {}
 	for enemy_id in enemy_bodies.keys():
-		var actor: BastionEnemyActor3D = enemy_bodies[enemy_id]
+		var actor = enemy_bodies[enemy_id]
 		if not is_instance_valid(actor):
 			continue
 		for module_id in module_areas.keys():
@@ -260,7 +260,7 @@ func _register_hit(enemy_id: String, module_id: String) -> void:
 	var key := "%s:%s" % [enemy_id, module_id]
 	if float(_hit_cooldowns.get(key, 0.0)) > 0.0 or simulation == null:
 		return
-	var area: BastionModuleArea3D = module_areas.get(module_id)
+	var area = module_areas.get(module_id)
 	if area == null or not is_instance_valid(area):
 		return
 	var enemy_state: Dictionary = _state_map(simulation.get_snapshot().get("enemies", {})).get(enemy_id, {})
@@ -281,7 +281,7 @@ func _check_breaches() -> void:
 	if simulation == null:
 		return
 	for id in enemy_bodies.keys():
-		var actor: BastionEnemyActor3D = enemy_bodies[id]
+		var actor = enemy_bodies[id]
 		if not is_instance_valid(actor) or actor.get_path_progress() < 0.995 or _breach_seen.has(id):
 			continue
 		_breach_seen[id] = true
