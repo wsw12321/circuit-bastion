@@ -18,10 +18,28 @@ const PALETTES := {
 static func palette(kind: String) -> Color:
 	return PALETTES.get(kind, Color("#ff6b75"))
 
+static func draw_ground_layer(canvas: CanvasItem, center: Vector2, size: float, kind: String, phase: float, intensity := 1.0) -> void:
+	var base := palette(kind)
+	var is_boss := kind == "boss"
+	var ground := center + Vector2(0.0, size * 0.43)
+	var pulse := 0.90 + sin(phase * 2.0 + center.x * 0.01) * 0.08
+	canvas.draw_circle(ground, size * (0.42 if is_boss else 0.31) * pulse, Color(0.0, 0.02, 0.04, 0.48 * intensity), true)
+	canvas.draw_arc(ground, size * (0.42 if is_boss else 0.31) * pulse, 0.0, TAU, 24, Color(base, 0.28 * intensity), 1.5 if not is_boss else 2.5)
+	if is_boss:
+		canvas.draw_arc(center, size * 1.18, phase * 0.42, phase * 0.42 + 4.8, 32, Color(base, 0.24 * intensity), 2.0)
+		for index in 3:
+			var angle := float(index) * TAU / 3.0 + phase * 0.16
+			var marker := center + Vector2(cos(angle), sin(angle)) * size * 1.12
+			canvas.draw_line(marker - Vector2(0.0, size * 0.07), marker + Vector2(0.0, size * 0.07), Color("#ffca62", 0.65 * intensity), 2.0)
+	elif kind == "phase":
+		canvas.draw_arc(center, size * 0.86, -phase, -phase + 3.1, 18, Color(base, 0.30 * intensity), 1.2)
+
 static func draw_enemy(canvas: CanvasItem, center: Vector2, size: float, kind: String, state: String, phase: float, hit_intensity := 0.0) -> void:
 	var base := palette(kind)
+	var hit := clampf(hit_intensity, 0.0, 1.0)
 	var bob := sin(phase * 2.0 + center.x * 0.01) * size * 0.035
-	var point := center + Vector2(0.0, bob)
+	var stagger := sin(phase * 18.0) * size * 0.055 * hit
+	var point := center + Vector2(stagger, bob)
 	var fade := 0.42 if state == "dead" else 1.0
 	var body := Color(base, fade)
 	match kind:
@@ -41,24 +59,37 @@ static func draw_enemy(canvas: CanvasItem, center: Vector2, size: float, kind: S
 			_draw_boss(canvas, point, size, body, phase)
 		_:
 			_draw_scout(canvas, point, size, body, phase)
-	if hit_intensity > 0.0 and state != "dead":
-		var flash := clampf(hit_intensity, 0.0, 1.0)
-		canvas.draw_circle(point, size * (0.62 + flash * 0.18), Color(1.0, 1.0, 1.0, 0.10 * flash), false, 2.0 + flash * 3.0)
+	if hit > 0.0 and state != "dead":
+		var flash := hit
+		canvas.draw_circle(point, size * (0.62 + flash * 0.20), Color(1.0, 1.0, 1.0, 0.10 * flash), false, 2.0 + flash * 3.0)
 		canvas.draw_line(point - Vector2(size * 0.42, size * 0.42), point + Vector2(size * 0.42, size * 0.42), Color(1.0, 0.93, 0.72, 0.72 * flash), 2.0)
 		canvas.draw_line(point + Vector2(size * 0.42, -size * 0.42), point - Vector2(size * 0.42, -size * 0.42), Color(1.0, 1.0, 1.0, 0.42 * flash), 1.0)
+		for index in 6:
+			var angle := float(index) * TAU / 6.0 + phase * 0.9
+			var inner := point + Vector2(cos(angle), sin(angle)) * size * 0.52
+			var outer := point + Vector2(cos(angle), sin(angle)) * size * (0.72 + flash * 0.20)
+			canvas.draw_line(inner, outer, Color("#fff1c2", 0.78 * flash), 1.5)
+		if kind == "boss":
+			canvas.draw_arc(point, size * (0.90 + flash * 0.16), -phase, -phase + 4.6, 24, Color("#fff1c2", 0.84 * flash), 3.0)
 
 static func draw_death_burst(canvas: CanvasItem, center: Vector2, size: float, kind: String, phase: float, intensity := 1.0) -> void:
 	var base := palette(kind)
 	var pulse := clampf(intensity, 0.0, 1.0)
-	canvas.draw_circle(center, size * (0.34 + pulse * 0.28), Color(base, 0.08 * pulse), true)
-	canvas.draw_circle(center, size * (0.34 + pulse * 0.28), Color(1.0, 0.88, 0.68, 0.60 * pulse), false, 2.0)
+	var is_boss := kind == "boss"
+	canvas.draw_circle(center, size * (0.34 + pulse * 0.30), Color(base, 0.08 * pulse), true)
+	canvas.draw_circle(center, size * (0.34 + pulse * 0.30), Color(1.0, 0.88, 0.68, 0.60 * pulse), false, 2.0 if not is_boss else 3.5)
+	canvas.draw_arc(center, size * (0.66 + pulse * 0.20), phase * 0.8, phase * 0.8 + 4.7, 24, Color(base, 0.58 * pulse), 2.0 if not is_boss else 3.0)
 	for index in 8:
 		var angle := float(index) * TAU / 8.0 + phase * 0.8
 		var inner := center + Vector2(cos(angle), sin(angle)) * size * 0.16
-		var outer := center + Vector2(cos(angle), sin(angle)) * size * (0.50 + pulse * 0.24)
-		canvas.draw_line(inner, outer, Color(base, 0.75 * pulse), 2.0)
-	canvas.draw_line(center - Vector2(size * 0.30, size * 0.18), center + Vector2(size * 0.30, size * 0.18), Color(1.0, 0.96, 0.80, 0.70 * pulse), 2.0)
-	canvas.draw_line(center - Vector2(size * 0.18, size * 0.30), center + Vector2(size * 0.18, size * 0.30), Color(1.0, 0.96, 0.80, 0.50 * pulse), 2.0)
+		var outer := center + Vector2(cos(angle), sin(angle)) * size * (0.50 + pulse * (0.24 if not is_boss else 0.42))
+		canvas.draw_line(inner, outer, Color(base, 0.75 * pulse), 2.0 if not is_boss else 3.0)
+	for index in 4:
+		var fragment_angle := phase * 0.5 + float(index) * TAU / 4.0 + 0.3
+		var fragment_center := center + Vector2(cos(fragment_angle), sin(fragment_angle)) * size * (0.34 + pulse * 0.18)
+		canvas.draw_colored_polygon(_points(fragment_center, size * 0.10, [Vector2(-0.7, -0.25), Vector2(0.6, 0.0), Vector2(0.0, 0.7)]), Color(base, 0.70 * pulse))
+	canvas.draw_line(center - Vector2(size * 0.30, size * 0.18), center + Vector2(size * 0.30, size * 0.18), Color(1.0, 0.96, 0.80, 0.70 * pulse), 2.0 if not is_boss else 3.0)
+	canvas.draw_line(center - Vector2(size * 0.18, size * 0.30), center + Vector2(size * 0.18, size * 0.30), Color(1.0, 0.96, 0.80, 0.50 * pulse), 2.0 if not is_boss else 3.0)
 
 static func _draw_scout(canvas: CanvasItem, center: Vector2, size: float, color: Color, phase: float) -> void:
 	var body := _points(center, size, [Vector2(0, -0.58), Vector2(0.48, 0), Vector2(0, 0.58), Vector2(-0.48, 0)])
