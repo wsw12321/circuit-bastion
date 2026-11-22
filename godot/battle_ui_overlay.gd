@@ -2,6 +2,8 @@ extends Control
 class_name BattleUIOverlay
 
 const UI_THEME := preload("res://godot/ui_theme.tres")
+const TOP_BAR_HEIGHT := 72.0
+const RIGHT_PANEL_WIDTH := 326.0
 
 var battle_view: Control
 var pause_button: Button
