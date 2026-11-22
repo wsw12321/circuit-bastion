@@ -19,6 +19,9 @@ func _run() -> void:
 	var preview: Dictionary = world.preview_deployment("pulse_cannon", world.cell_to_world(Vector2i(4, 2)))
 	if not _assert(bool(preview.get("valid", false)), "3D deployment preview should snap to an empty cell"):
 		return
+	var outside_preview: Dictionary = world.preview_deployment("pulse_cannon", world.cell_to_world(Vector2i(-1, 2)))
+	if not _assert(not bool(outside_preview.get("valid", true)), "3D deployment preview must reject positions outside the board"):
+		return
 	var snapped: Vector3 = preview.get("world_position", Vector3.INF)
 	if not _assert(snapped == world.cell_to_world(Vector2i(4, 2)), "3D deployment must snap to cell center"):
 		return
@@ -58,6 +61,12 @@ func _run() -> void:
 		return
 	var actor_count: int = world.get_enemy_actor_count()
 	var module_count: int = world.module_areas.size()
+	# Resetting the deterministic simulation must also clear stale runtime
+	# contact state. IDs restart at E001/M01 after a reset.
+	simulation.reset(7331)
+	world.sync_snapshot(simulation.get_snapshot())
+	if not _assert(world.get_enemy_actor_count() == 0 and world.module_areas.is_empty(), "3D runtime nodes must be pruned after a simulation reset"):
+		return
 	world.free()
 	print("WORLD_PHYSICS_3D_OK actors=%d hits=%d modules=%d" % [actor_count, hit_count, module_count])
 	quit(0)
