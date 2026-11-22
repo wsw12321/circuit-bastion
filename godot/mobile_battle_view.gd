@@ -45,8 +45,9 @@ func _draw_mobile(size: Vector2) -> void:
 			draw_rect(rect, Color("#1b3b48"), false, 1.0)
 	_draw_routes(origin, cell_size)
 	_draw_board_markers(origin, cell_size)
-	_draw_modules(origin, cell_size)
-	_draw_enemies(origin, cell_size)
+	if not use_3d_battlefield:
+		_draw_modules(origin, cell_size)
+		_draw_enemies(origin, cell_size)
 	draw_string(ThemeDB.fallback_font, board.position + Vector2(14, board.size.y - 13), "点按格子选择模块 · 路由 %s" % (route_focus if route_focus != "" else "SIGNAL"), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7697a4"))
 	_draw_mobile_bottom_bar(size)
 
