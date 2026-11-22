@@ -270,7 +270,7 @@ func _sync_controls() -> void:
 		if str(module.get("id", "")) == selected_id:
 			selected_name = str(module.get("name", module.get("label", selected_name)))
 			selected_load = float(module.get("load", 0.0))
-			var raw_color = module.get("color", selected_color)
+			var raw_color: Variant = module.get("color", selected_color)
 			selected_color = raw_color if raw_color is Color else Color(str(raw_color))
 			break
 	inspector_title.text = selected_name
