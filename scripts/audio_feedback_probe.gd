@@ -12,6 +12,15 @@ func _run() -> void:
 	var bus := AudioFeedbackBus.new()
 	root.add_child(bus)
 	await process_frame
+	var generated = bus._stream_for("attack")
+	if generated == null:
+		_fail("procedural attack stream was not generated")
+		return
+	var replacement_stream := AudioStreamWAV.new()
+	bus.set_resource_slot("button", replacement_stream)
+	if bus._stream_for("button") != replacement_stream:
+		_fail("resource slot did not override generated button stream")
+		return
 	var received: Array[String] = []
 	bus.feedback_emitted.connect(func(kind: String, _payload: Dictionary) -> void:
 		received.append(kind)
