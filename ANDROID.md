@@ -4,7 +4,7 @@ Circuit Bastion exports an Android ARM64 debug APK from the same Godot scene and
 
 ## Local export
 
-Install Godot 4.3, the Android SDK platform 34, build-tools 34.0.0, and an OpenJDK 17 runtime. Configure the Godot Android export templates, then run:
+Install Godot 4.3, the Android SDK platform 34, build-tools 34.0.0, command-line tools, CMake 3.10.2.4988404, NDK 23.2.8568313, and an OpenJDK 17 runtime. Configure the Godot Android export templates, then run:
 
     godot4 --headless --path . --export-debug "Android" dist/godot/circuit-bastion-android-arm64.apk
 
