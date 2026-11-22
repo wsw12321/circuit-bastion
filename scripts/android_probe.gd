@@ -2,7 +2,8 @@ extends SceneTree
 
 ## Android export contract check against the current touch-capable BattleView.
 
-const BattleView = preload("res://godot/battle_view.gd")
+const GameRoot = preload("res://scripts/game_root.gd")
+const MobileBattleView = preload("res://godot/mobile_battle_view.gd")
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -33,9 +34,13 @@ func _run() -> void:
 			if not DirAccess.dir_exists_absolute(sdk_root + "/" + required_path):
 				_fail("missing Android SDK package: " + required_path)
 				return
-	var view = BattleView.new()
-	if view == null or not view.has_method("_cell_at"):
-		_fail("touch-capable BattleView could not be instantiated")
+	var selected_script: Script = GameRoot.select_view_script(true)
+	if selected_script == null or selected_script.resource_path != "res://godot/mobile_battle_view.gd":
+		_fail("Android runtime must select MobileBattleView")
+		return
+	var view = selected_script.new()
+	if view == null or not view.has_method("_cell_at_mobile"):
+		_fail("touch-capable MobileBattleView could not be instantiated")
 		return
 	print("ANDROID_SMOKE_OK preset=Android arm64=enabled touch=screen")
 	quit(0)
