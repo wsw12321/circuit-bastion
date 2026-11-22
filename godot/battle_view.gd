@@ -1255,8 +1255,13 @@ func _draw_route_fx(origin: Vector2, cell_size: float) -> void:
 				var radius := 12.0 + (1.0 - fade) * 34.0
 				draw_circle(center, radius, Color(color, fade * 0.10), true)
 				draw_arc(center, radius, -phase, -phase + TAU * 0.88, 28, Color(color, fade), 3.0)
-				for spark in range(6):
-					var angle := phase + float(spark) * TAU / 6.0
+				var spark_count := 6
+				if effect_quality == 1:
+					spark_count = 4
+				elif effect_quality == 0:
+					spark_count = 0
+				for spark in range(spark_count):
+					var angle := phase + float(spark) * TAU / float(maxi(1, spark_count))
 					var inner := center + Vector2(cos(angle), sin(angle)) * radius * 0.42
 					var outer := center + Vector2(cos(angle), sin(angle)) * (radius + 8.0) * 0.68
 					draw_line(inner, outer, Color(color, fade), 2.0)
