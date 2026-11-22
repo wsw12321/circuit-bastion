@@ -259,6 +259,16 @@ func _mobile_action(index: int) -> void:
 	queue_redraw()
 
 
+func _rotate_battle_camera(delta: Vector2) -> void:
+	# Keep the Android contract explicit while sharing the desktop orbit implementation.
+	super._rotate_battle_camera(delta)
+
+
+func _zoom_battle_camera(delta: float) -> void:
+	# Pinch and wheel zoom use the same clamped camera target on every platform.
+	super._zoom_battle_camera(delta)
+
+
 func _cell_at_mobile(position: Vector2) -> Vector2i:
 	var metrics := _mobile_grid(get_rect().size)
 	var cell_size: float = metrics["cell_size"]
