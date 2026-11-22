@@ -160,7 +160,7 @@ jobs:
           grep -Fq "uses: android-actions/setup-android@v4" .github/workflows/release.yml
           grep -Fq "packages: ''" .github/workflows/release.yml
           if grep -Eq "([[:space:]]|^)tools([[:space:]]|$)" .github/workflows/release.yml; then
-            echo "obsolete Android SDK tools package requested" >&2
+            echo "obsolete Android SDK package requested" >&2
             exit 1
           fi
 
