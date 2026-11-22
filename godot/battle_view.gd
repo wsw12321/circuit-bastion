@@ -1280,8 +1280,17 @@ func _draw_route_fx(origin: Vector2, cell_size: float) -> void:
 			draw_line(core - Vector2(radius, 0), core + Vector2(radius, 0), Color(color, fade * 0.6), 2.0)
 
 func _draw_fx_overlay(size: Vector2) -> void:
+	if screen_feedback_time > 0.0 and not bool(snapshot.get("finished", false)):
+		var feedback_fade := clampf(screen_feedback_strength * (screen_feedback_time / 0.7), 0.0, 1.0)
+		var feedback_color := _effect_color("breach", Color("#ff6b75")) if screen_feedback_strength > 0.7 else _effect_color("hit", Color("#ffca62"))
+		var edge := 4.0 + 5.0 * feedback_fade
+		draw_rect(Rect2(0, 0, size.x, edge), Color(feedback_color, feedback_fade * 0.28), true)
+		draw_rect(Rect2(0, size.y - edge, size.x, edge), Color(feedback_color, feedback_fade * 0.28), true)
+		draw_rect(Rect2(0, 0, edge, size.y), Color(feedback_color, feedback_fade * 0.18), true)
+		draw_rect(Rect2(size.x - edge, 0, edge, size.y), Color(feedback_color, feedback_fade * 0.18), true)
 	if wave_banner_time > 0.0 and not wave_banner_text.is_empty():
-		var fade := clampf(wave_banner_time / 0.34, 0.0, 1.0)
+		var rhythm_alpha := 0.78 + sin(wave_rhythm_phase) * 0.12
+		var fade := clampf(wave_banner_time / 0.34, 0.0, 1.0) * rhythm_alpha
 		var banner := Rect2(Vector2(0, TOP_BAR_HEIGHT + 4.0), Vector2(size.x, 54.0))
 		draw_rect(banner, Color("#0b202a", 0.92 * fade), true)
 		draw_line(banner.position + Vector2(0, banner.size.y), banner.position + Vector2(banner.size.x, banner.size.y), Color(wave_banner_color, 0.8 * fade), 2.0)
@@ -1289,7 +1298,7 @@ func _draw_fx_overlay(size: Vector2) -> void:
 		draw_string(ThemeDB.fallback_font, banner.position + Vector2(0, 43), "DETERMINISTIC EVENT BROADCAST", HORIZONTAL_ALIGNMENT_CENTER, size.x, 9, Color("#9fb8c1", fade))
 	if bool(snapshot.get("finished", false)):
 		var victory_state := bool(snapshot.get("victory", false))
-		var color := Color("#68e3bf") if victory_state else Color("#ff6b75")
+		var color := _effect_color("success", Color("#68e3bf")) if victory_state else _effect_color("breach", Color("#ff6b75"))
 		var fade_result := clampf(0.30 + result_transition_time * 0.18, 0.0, 0.74)
 		draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", fade_result), true)
 		var title := "SYSTEM VICTORY" if victory_state else "CORE BREACHED"
