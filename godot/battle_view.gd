@@ -21,6 +21,7 @@ const CHARACTER_ART := preload("res://godot/character_art.gd")
 const UI_OVERLAY_SCRIPT := preload("res://godot/battle_ui_overlay.gd")
 
 var simulation: Object
+@export var use_3d_battlefield := false
 var snapshot: Dictionary = {}
 var selected_module_id := "pulse_cannon"
 var selected_cell := Vector2i(4, 3)
@@ -285,9 +286,10 @@ func _draw_battlefield(size: Vector2) -> void:
 			draw_rect(rect, fill, true)
 			draw_rect(rect, Color("#1b3b48"), false, 1.0)
 	_draw_board_markers(origin, cell_size)
-	_draw_modules(origin, cell_size)
+	if not use_3d_battlefield:
+		_draw_modules(origin, cell_size)
+		_draw_enemies(origin, cell_size)
 	_draw_build_preview(origin, cell_size)
-	_draw_enemies(origin, cell_size)
 	_draw_route_fx(origin, cell_size)
 	_draw_path_legend(board)
 
