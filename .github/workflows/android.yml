@@ -51,22 +51,22 @@ jobs:
           template_root="$HOME/.local/share/godot/export_templates"
           mkdir -p "$godot_root" "$template_root"
           curl --fail --retry 3 --location \
-            "https://github.com/godotengine/godot/releases/download/\${GODOT_RELEASE}/Godot_v\${GODOT_VERSION}-stable_linux.x86_64.zip" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" \
             --output "$godot_root/editor.zip"
           unzip -q "$godot_root/editor.zip" -d "$godot_root/editor"
-          mv "$godot_root/editor/Godot_v\${GODOT_VERSION}-stable_linux.x86_64" "$godot_root/godot"
+          mv "$godot_root/editor/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$godot_root/godot"
           chmod +x "$godot_root/godot"
           curl --fail --retry 3 --location \
-            "https://github.com/godotengine/godot/releases/download/\${GODOT_RELEASE}/Godot_v\${GODOT_VERSION}-stable_export_templates.tpz" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" \
             --output "$godot_root/templates.tpz"
           unzip -q "$godot_root/templates.tpz" -d "$godot_root/templates"
-          template_source="\$(find "$godot_root/templates" -type f -name 'android_debug.apk' -printf '%h\n' | head -n 1)"
+          template_source="$(find "$godot_root/templates" -type f -name 'android_debug.apk' -printf '%h\n' | head -n 1)"
           if [[ -z "$template_source" || ! -d "$template_source" ]]; then
             echo "Godot Android export template directory was not found" >&2
             find "$godot_root/templates" -maxdepth 4 -print >&2
             exit 1
           fi
-          template_destination="$template_root/\${GODOT_VERSION}.stable"
+          template_destination="$template_root/${GODOT_VERSION}.stable"
           mkdir -p "$template_destination"
           cp -R "$template_source/." "$template_destination/"
           test -f "$template_destination/android_debug.apk"
@@ -112,11 +112,11 @@ jobs:
       - name: Attach APK to the tagged release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in \$(seq 1 20); do
+          for attempt in $(seq 1 20); do
             if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
               gh release upload "$GITHUB_REF_NAME" \
                 dist/godot/circuit-bastion-android-arm64.apk --clobber
