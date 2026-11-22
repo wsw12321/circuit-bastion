@@ -34,12 +34,23 @@ func _on_event_recorded(event: Dictionary) -> void:
 	var kind := str(event.get("kind", "event"))
 	var palette := {
 		"action": Color("#ffca62"),
+		"hit": Color("#ffca62"),
 		"enemy_destroyed": Color("#68e3bf"),
 		"breach": Color("#ff6b75"),
+		"overheat": Color("#ff8a5b"),
+		"disconnect": Color("#ff6b75"),
 		"wave": Color("#b690ff"),
+		"wave_clear": Color("#68e3bf"),
+		"victory": Color("#68e3bf"),
+		"defeat": Color("#ff6b75"),
 		"control": Color("#b690ff"),
 	}
 	view_events.push_front({
+		"sequence": int(event.get("sequence", 0)),
+		"kind": kind,
+		"source": str(event.get("source", "")),
+		"target": str(event.get("target", "")),
+		"payload": event.get("payload", {}).duplicate(true),
 		"time": "%02d:%02d.%03d" % [int(event.get("tick", 0)) / 600, (int(event.get("tick", 0)) / 10) % 60, int(event.get("tick", 0)) * 100 % 1000],
 		"type": kind.to_upper(),
 		"text": str(event.get("message", "")),
