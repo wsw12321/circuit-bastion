@@ -17,6 +17,7 @@ var max_health := 100
 var health := 100
 var contact_radius := 0.62
 var _configured := false
+var _mesh_material: StandardMaterial3D
 
 func _ready() -> void:
 	collision_layer = MODULE_COLLISION_LAYER
@@ -29,6 +30,16 @@ func _ready() -> void:
 	sphere.radius = contact_radius
 	shape.shape = sphere
 	add_child(shape)
+	var blocker := StaticBody3D.new()
+	blocker.name = "ModuleCollisionBody"
+	blocker.collision_layer = MODULE_COLLISION_LAYER
+	blocker.collision_mask = ENEMY_COLLISION_LAYER
+	var blocker_shape := CollisionShape3D.new()
+	var blocker_sphere := SphereShape3D.new()
+	blocker_sphere.radius = contact_radius
+	blocker_shape.shape = blocker_sphere
+	blocker.add_child(blocker_shape)
+	add_child(blocker)
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "ModuleMesh"
 	var mesh := CylinderMesh.new()
@@ -41,12 +52,16 @@ func _ready() -> void:
 	material.albedo_color = _tint()
 	material.emission_enabled = true
 	material.emission = material.albedo_color * 0.16
+	_mesh_material = material
 	mesh_instance.material_override = material
 	add_child(mesh_instance)
 
 func configure(state: Dictionary, world_position: Vector3) -> void:
 	module_id = str(state.get("id", module_id))
 	kind = str(state.get("kind", kind))
+	if _mesh_material != null:
+		_mesh_material.albedo_color = _tint()
+		_mesh_material.emission = _mesh_material.albedo_color * 0.16
 	var grid: Dictionary = state.get("grid", {})
 	grid_position = Vector2i(int(grid.get("x", grid_position.x)), int(grid.get("y", grid_position.y)))
 	global_position = world_position
