@@ -12,6 +12,7 @@ signal enemy_breached(enemy_id: String, damage: int)
 
 const ENEMY_ACTOR_SCRIPT := preload("res://gameplay/world/enemy_actor_3d.gd")
 const MODULE_AREA_SCRIPT := preload("res://gameplay/world/module_area_3d.gd")
+const CAMERA_SCRIPT := preload("res://godot/battle_camera_3d.gd")
 const GRID_COLUMNS := 8
 const GRID_ROWS := 6
 const CELL_SIZE := 2.0
@@ -89,12 +90,12 @@ func _create_ground() -> void:
 	add_child(ground)
 
 func _create_camera() -> void:
-	var camera := Camera3D.new()
+	var camera = CAMERA_SCRIPT.new()
 	camera.name = "BattleCamera3D"
-	camera.position = Vector3(0.0, 15.0, 14.0)
-	camera.current = true
+	camera.target = Vector3(0.0, 0.0, 0.0)
+	camera.zoom_distance = 18.0
 	add_child(camera)
-	camera.look_at(Vector3(0.0, 0.0, 0.0))
+	camera.current = true
 	var light := DirectionalLight3D.new()
 	light.name = "BattleLight3D"
 	light.rotation_degrees = Vector3(-55.0, -25.0, 0.0)
