@@ -165,6 +165,7 @@ func _draw() -> void:
 	_draw_right_panel(size)
 	_draw_bottom_bar(size)
 	_draw_result_banner(size)
+	_draw_fx_overlay(size)
 
 
 func _draw_top_bar(size: Vector2) -> void:
