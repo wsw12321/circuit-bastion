@@ -53,9 +53,13 @@ func _run() -> void:
 	if battle_view_node == null or not battle_view_node.has_method("set_battle_world") or not battle_view_node.has_method("_rotate_battle_camera") or not battle_view_node.has_method("_zoom_battle_camera"):
 		_fail("BattleView camera input wiring is missing")
 		return
+	var battle_view_source_file := FileAccess.open("res://godot/battle_view.gd", FileAccess.READ)
+	if battle_view_source_file == null or not battle_view_source_file.get_as_text().contains("MOUSE_BUTTON_MASK_LEFT"):
+		_fail("desktop left-drag camera contract is missing")
+		return
 	var child_count := instance.get_child_count()
 	instance.free()
-	print("GODOT_SMOKE_OK children=%d root_script=res://scripts/game_root.gd battle_view=true overlay=true world_3d=true camera_orbit_zoom=true camera_input=true" % child_count)
+	print("GODOT_SMOKE_OK children=%d root_script=res://scripts/game_root.gd battle_view=true overlay=true world_3d=true camera_orbit_zoom=true camera_input=true left_drag=true" % child_count)
 	quit(0)
 
 func _fail(message: String) -> void:
