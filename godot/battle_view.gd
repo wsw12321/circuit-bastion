@@ -1088,33 +1088,43 @@ func _consume_event(event: Dictionary) -> void:
 		"action":
 			if message.find("命中") >= 0:
 				route_flash = 1.0
-				route_flash_color = Color("#ffca62")
-				_spawn_fx("attack", event, Color("#ffca62"), 0.78)
-				_spawn_fx("hit", event, Color("#fff2c4"), 0.52)
+				route_flash_color = _effect_color("hit", Color("#ffca62"))
+				_spawn_fx("attack", event, _effect_color("hit", Color("#ffca62")), 0.78)
+				_spawn_fx("hit", event, _effect_color("hit", Color("#fff2c4")), 0.52)
+				_trigger_screen_feedback(0.30, 0.22)
 		"enemy_destroyed":
-			_spawn_fx("hit", event, Color("#68e3bf"), 0.60)
+			_spawn_fx("hit", event, _effect_color("success", Color("#68e3bf")), 0.60)
+			_trigger_screen_feedback(0.38, 0.25)
 		"breach":
 			route_flash = 1.0
-			route_flash_color = Color("#ff6b75")
-			_spawn_fx("breach", event, Color("#ff6b75"), 0.86)
+			route_flash_color = _effect_color("breach", Color("#ff6b75"))
+			_spawn_fx("breach", event, _effect_color("breach", Color("#ff6b75")), 0.86)
+			_trigger_screen_feedback(0.95, 0.70)
 		"overheat":
-			_spawn_fx("overheat", event, Color("#ff8a5b"), 0.95)
+			_spawn_fx("overheat", event, _effect_color("overheat", Color("#ff8a5b")), 0.95)
+			_trigger_screen_feedback(0.55, 0.42)
 		"disconnect":
-			_spawn_fx("disconnect", event, Color("#ff6b75"), 0.88)
+			_spawn_fx("disconnect", event, _effect_color("breach", Color("#ff6b75")), 0.88)
+			_trigger_screen_feedback(0.65, 0.46)
 		"reconnect":
-			_spawn_fx("reconnect", event, Color("#68e3bf"), 0.70)
+			_spawn_fx("reconnect", event, _effect_color("success", Color("#68e3bf")), 0.70)
+			_trigger_screen_feedback(0.22, 0.20)
 		"wave":
 			var wave := int(payload.get("wave", snapshot.get("wave", 1)))
-			_start_wave_banner("WAVE %02d  INCOMING" % wave, Color("#b690ff"))
+			_start_wave_banner("WAVE %02d  INCOMING" % wave, _effect_color("banner", Color("#b690ff")))
+			_trigger_screen_feedback(0.34 + minf(float(wave), 10.0) * 0.025, 0.42)
 		"victory":
-			_start_wave_banner("SYSTEM VICTORY", Color("#68e3bf"))
+			_start_wave_banner("SYSTEM VICTORY", _effect_color("success", Color("#68e3bf")))
 			_start_result_transition("victory")
+			_trigger_screen_feedback(0.75, 0.90)
 		"defeat":
-			_start_wave_banner("CORE BREACHED", Color("#ff6b75"))
+			_start_wave_banner("CORE BREACHED", _effect_color("breach", Color("#ff6b75")))
 			_start_result_transition("defeat")
+			_trigger_screen_feedback(0.95, 1.0)
 		_:
 			if message.find("过热") >= 0:
-				_spawn_fx("overheat", event, Color("#ff8a5b"), 0.95)
+				_spawn_fx("overheat", event, _effect_color("overheat", Color("#ff8a5b")), 0.95)
+				_trigger_screen_feedback(0.45, 0.35)
 
 func _spawn_fx(kind: String, event: Dictionary, color: Color, duration: float) -> void:
 	var payload_value = event.get("payload", {})
@@ -1142,6 +1152,10 @@ func _update_fx(delta: float) -> void:
 	screen_feedback_strength = maxf(0.0, screen_feedback_strength - delta * 1.8)
 	wave_rhythm_phase = fmod(wave_rhythm_phase + delta * (1.4 if wave_banner_time > 0.0 else 0.7), TAU)
 	result_transition_time += delta
+
+func _trigger_screen_feedback(strength: float, duration: float = 0.3) -> void:
+	screen_feedback_strength = maxf(screen_feedback_strength, clampf(strength, 0.0, 1.0))
+	screen_feedback_time = maxf(screen_feedback_time, maxf(0.05, duration))
 
 func _start_wave_banner(text: String, color: Color) -> void:
 	wave_banner_text = text
