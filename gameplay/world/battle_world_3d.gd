@@ -284,7 +284,7 @@ func _check_breaches() -> void:
 		var actor = enemy_bodies[id]
 		if not is_instance_valid(actor):
 			continue
-		var at_core := actor.get_path_progress() >= 0.995
+		var at_core: bool = actor.get_path_progress() >= 0.995
 		if core_hit_area != null:
 			at_core = at_core and actor.global_position.distance_to(core_hit_area.global_position) <= CELL_SIZE * 0.9
 		if not at_core or _breach_seen.has(id):
