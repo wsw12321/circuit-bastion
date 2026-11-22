@@ -324,7 +324,7 @@ func add_module(module_kind: String, grid_position := Vector2i.ZERO, rotation :=
 		"rotation": posmod(rotation, 4), "level": 1,
 		"power": int(spec.power), "damage": int(spec.damage),
 		"cooldown": float(spec.cooldown), "cooldown_left": 0.0,
-		"range": float(spec.range), "heat": 0, "heat_limit": 100,
+		"range": float(spec.range), "heat": 0, "heat_rate": int(spec.get("heat", 0)), "heat_limit": 100,
 		"rules": [], "rule_slots": 2, "upgrades": {}, "firmware": "standard", "disabled": false,
 	}
 	_record_command("add_module", {"kind": module_kind, "x": grid_position.x, "y": grid_position.y})
