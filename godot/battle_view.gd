@@ -18,6 +18,7 @@ const MARGIN := 28.0
 const RIGHT_PANEL_WIDTH := 326.0
 const BOTTOM_BAR_HEIGHT := 84.0
 const CHARACTER_ART := preload("res://godot/character_art.gd")
+const UI_OVERLAY_SCRIPT := preload("res://godot/battle_ui_overlay.gd")
 
 var simulation: Object
 var snapshot: Dictionary = {}
@@ -67,6 +68,7 @@ var wave_banner_color := Color("#b690ff")
 var result_transition_time := 0.0
 var previous_finished := false
 var previous_victory := false
+var ui_overlay: Node
 
 var modules: Array = [
 	{"id": "scanner", "name": "探针", "cell": Vector2i(1, 1), "color": Color("#5ed6ff"), "load": 0.22},
@@ -85,6 +87,10 @@ var events: Array = [
 
 func _ready() -> void:
 	_configure_effects()
+	if ui_overlay == null:
+		ui_overlay = UI_OVERLAY_SCRIPT.new()
+		add_child(ui_overlay)
+		ui_overlay.call("attach", self)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	focus_mode = Control.FOCUS_ALL
 	grab_focus()
