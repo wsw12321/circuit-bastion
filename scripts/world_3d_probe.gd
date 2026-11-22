@@ -69,7 +69,7 @@ func _run() -> void:
 		return
 	if not _assert(hit_count >= 1, "3D collision query should emit a hit"):
 		return
-	var actor_count := world.get_enemy_actor_count()
+	var actor_count: int = world.get_enemy_actor_count()
 	instance.free()
 	print("WORLD_3D_OK camera=orbit-zoom actors=%d hits=%d" % [actor_count, hit_count])
 	quit(0)
