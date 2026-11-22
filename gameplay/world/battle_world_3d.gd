@@ -158,42 +158,59 @@ func _create_route_visuals() -> void:
 		add_child(beacon)
 
 func _create_camera() -> void:
-	var camera := CAMERA_SCRIPT.new()
-	camera.name = "BattleCamera3D"
-	camera.target = Vector3(0.0, 0.28, 0.0)
-	camera.zoom_distance = 18.0
-	camera.target_zoom_distance = 18.0
-	camera.pitch = -0.78
-	camera.target_pitch = -0.78
-	camera.yaw = 0.32
-	camera.target_yaw = 0.32
-	add_child(camera)
+	var camera: Camera3D = get_node_or_null("Camera3D")
+	if camera == null:
+		for child in get_children():
+			if child is Camera3D:
+				camera = child as Camera3D
+				break
+	if camera == null or not camera.has_method("rotate_orbit"):
+			camera = CAMERA_SCRIPT.new()
+			camera.name = "BattleCamera3D"
+			add_child(camera)
+	camera.set("target", Vector3(0.0, 0.28, 0.0))
+	camera.set("zoom_distance", 18.0)
+	camera.set("target_zoom_distance", 18.0)
+	camera.set("pitch", -0.78)
+	camera.set("target_pitch", -0.78)
+	camera.set("yaw", 0.32)
+	camera.set("target_yaw", 0.32)
 	camera.current = true
 
-	var key_light := DirectionalLight3D.new()
-	key_light.name = "BattleKeyLight3D"
+	var key_light: DirectionalLight3D = get_node_or_null("KeyLight")
+	if key_light == null:
+		key_light = get_node_or_null("BattleKeyLight3D")
+	if key_light == null:
+		key_light = DirectionalLight3D.new()
+		key_light.name = "BattleKeyLight3D"
+		add_child(key_light)
 	key_light.rotation_degrees = Vector3(-55.0, -28.0, 0.0)
 	key_light.light_color = Color("#b9e5ff")
 	key_light.light_energy = 1.35
 	key_light.shadow_enabled = true
 	key_light.directional_shadow_max_distance = 40.0
-	add_child(key_light)
 
-	var rim_light := DirectionalLight3D.new()
-	rim_light.name = "BattleRimLight3D"
+	var rim_light: DirectionalLight3D = get_node_or_null("BattleRimLight3D")
+	if rim_light == null:
+		rim_light = DirectionalLight3D.new()
+		rim_light.name = "BattleRimLight3D"
+		add_child(rim_light)
 	rim_light.rotation_degrees = Vector3(-28.0, 148.0, 0.0)
 	rim_light.light_color = Color("#5b7dff")
 	rim_light.light_energy = 0.34
 	rim_light.shadow_enabled = false
-	add_child(rim_light)
 
-	var fill := OmniLight3D.new()
-	fill.name = "BattleFillLight3D"
+	var fill: OmniLight3D = get_node_or_null("FillLight")
+	if fill == null:
+		fill = get_node_or_null("BattleFillLight3D")
+	if fill == null:
+		fill = OmniLight3D.new()
+		fill.name = "BattleFillLight3D"
+		add_child(fill)
 	fill.position = Vector3(0.0, 6.0, 3.0)
 	fill.omni_range = 30.0
 	fill.light_color = Color("#4b8fa9")
 	fill.light_energy = 1.1
-	add_child(fill)
 
 func _create_core_area() -> void:
 	core_hit_area = Area3D.new()
