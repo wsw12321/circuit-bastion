@@ -89,8 +89,10 @@ func _create_ground() -> void:
 	ground.add_child(mesh_instance)
 	add_child(ground)
 
+var camera
+
 func _create_camera() -> void:
-	var camera = get_node_or_null("Camera3D")
+	camera = get_node_or_null("Camera3D")
 	if camera == null:
 		camera = CAMERA_SCRIPT.new()
 		camera.name = "BattleCamera3D"
@@ -112,6 +114,15 @@ func _create_camera() -> void:
 		add_child(directional)
 	directional.rotation_degrees = Vector3(-55.0, -25.0, 0.0)
 	directional.light_energy = 1.1
+
+func handle_camera_input(event: InputEvent) -> bool:
+	if camera == null or not is_instance_valid(camera):
+		return false
+	return camera.handle_input(event)
+
+func reset_camera_view() -> void:
+	if camera != null and is_instance_valid(camera):
+		camera.reset_view()
 
 func _create_core_area() -> void:
 	core_hit_area = Area3D.new()
@@ -174,15 +185,19 @@ func deploy_bench_item_at_cell(bench_index: int, grid_position: Vector2i, rotati
 
 func move_module_to_cell(module_id: String, grid_position: Vector2i) -> bool:
 	if simulation == null or not simulation.modules.has(module_id):
+		deployment_rejected.emit(module_id, grid_position, "module_missing")
 		return false
 	var state: Dictionary = simulation.modules[module_id]
 	var preview: Dictionary = simulation.preview_placement(str(state.get("kind", "")), grid_position, int(state.get("rotation", 0)), module_id)
 	if not bool(preview.get("valid", false)):
+		deployment_rejected.emit(str(state.get("kind", module_id)), grid_position, str(preview.get("reason", "invalid_move")))
 		return false
 	var moved: bool = bool(simulation.move_module(module_id, grid_position))
 	if moved:
 		sync_snapshot(simulation.get_snapshot())
 		deployment_snapped.emit(module_id, grid_position, cell_to_world(grid_position))
+	else:
+		deployment_rejected.emit(str(state.get("kind", module_id)), grid_position, "simulation_rejected")
 	return moved
 
 func sync_snapshot(snapshot: Dictionary) -> void:
