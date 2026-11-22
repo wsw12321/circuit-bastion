@@ -1,20 +1,21 @@
 class_name BastionBattleWorld3D
 extends Node3D
 
-## Minimal 3D spatial layer for the Godot battlefield.
-## The deterministic simulation remains the source of truth. This node owns
-## presentation paths, physics-backed actors, module areas, and contact queries.
+## 3D runtime spatial layer for Circuit Bastion.
+## Simulation dictionaries remain the deterministic save/replay contract. This
+## node owns the live Path3D, CharacterBody3D actors and Area3D contacts.
 
+signal deployment_snapped(module_id: String, grid_position: Vector2i, world_position: Vector3)
+signal deployment_rejected(kind: String, grid_position: Vector2i, reason: String)
 signal enemy_hit(enemy_id: String, module_id: String, damage: int)
 signal enemy_breached(enemy_id: String, damage: int)
 
 const ENEMY_ACTOR_SCRIPT := preload("res://gameplay/world/enemy_actor_3d.gd")
 const MODULE_AREA_SCRIPT := preload("res://gameplay/world/module_area_3d.gd")
-
 const GRID_COLUMNS := 8
 const GRID_ROWS := 6
-const CELL_SIZE := 1.2
-const BOARD_ORIGIN := Vector2(-4.8, -3.6)
+const CELL_SIZE := 2.0
+const BOARD_ORIGIN := Vector3(-8.0, 0.52, -6.0)
 const ENEMY_COLLISION_LAYER := 2
 const MODULE_COLLISION_LAYER := 4
 
@@ -23,9 +24,11 @@ var route_path: Path3D
 var route_curve: Curve3D
 var enemy_container: Node3D
 var module_container: Node3D
+var core_hit_area: Area3D
 var enemy_bodies: Dictionary = {}
 var module_areas: Dictionary = {}
 var _hit_cooldowns: Dictionary = {}
+var _breach_seen: Dictionary = {}
 var _ready_nodes := false
 
 func _ready() -> void:
@@ -47,6 +50,7 @@ func _ensure_world_nodes() -> void:
 	route_path = Path3D.new()
 	route_path.name = "EnemyRoute3D"
 	route_curve = Curve3D.new()
+	route_curve.bake_interval = 0.1
 	for point in [
 		cell_to_world(Vector2i(0, 3)),
 		cell_to_world(Vector2i(2, 3)),
@@ -57,57 +61,148 @@ func _ensure_world_nodes() -> void:
 		route_curve.add_point(point)
 	route_path.curve = route_curve
 	add_child(route_path)
-	var floor_body := StaticBody3D.new()
-	floor_body.name = "BattlefieldFloor"
-	floor_body.collision_layer = 1
-	var floor_shape := CollisionShape3D.new()
-	var floor_box := BoxShape3D.new()
-	floor_box.size = Vector3(GRID_COLUMNS * CELL_SIZE + 2.0, 0.2, GRID_ROWS * CELL_SIZE + 2.0)
-	floor_shape.shape = floor_box
-	floor_shape.position.y = -0.2
-	floor_body.add_child(floor_shape)
-	add_child(floor_body)
+	_create_ground()
+	_create_camera()
+	_create_core_area()
 	_ready_nodes = true
 
+func _create_ground() -> void:
+	var ground := StaticBody3D.new()
+	ground.name = "Ground"
+	ground.collision_layer = 1
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(GRID_COLUMNS * CELL_SIZE, 0.2, GRID_ROWS * CELL_SIZE)
+	shape.shape = box
+	shape.position.y = -0.1
+	ground.add_child(shape)
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = box.size
+	mesh_instance.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#102a35")
+	material.emission_enabled = true
+	material.emission = Color("#06131a")
+	mesh_instance.material_override = material
+	ground.add_child(mesh_instance)
+	add_child(ground)
+
+func _create_camera() -> void:
+	var camera := Camera3D.new()
+	camera.name = "BattleCamera3D"
+	camera.position = Vector3(0.0, 15.0, 14.0)
+	camera.current = true
+	add_child(camera)
+	camera.look_at(Vector3(0.0, 0.0, 0.0))
+	var light := DirectionalLight3D.new()
+	light.name = "BattleLight3D"
+	light.rotation_degrees = Vector3(-55.0, -25.0, 0.0)
+	light.light_energy = 1.1
+	add_child(light)
+
+func _create_core_area() -> void:
+	core_hit_area = Area3D.new()
+	core_hit_area.name = "CoreHitArea3D"
+	core_hit_area.collision_layer = 8
+	core_hit_area.collision_mask = ENEMY_COLLISION_LAYER
+	var shape := CollisionShape3D.new()
+	var sphere := SphereShape3D.new()
+	sphere.radius = CELL_SIZE * 0.38
+	shape.shape = sphere
+	core_hit_area.position = cell_to_world(Vector2i(7, 3))
+	core_hit_area.add_child(shape)
+	add_child(core_hit_area)
+
 func cell_to_world(grid_position: Vector2i) -> Vector3:
-	return Vector3(
-		BOARD_ORIGIN.x + (float(grid_position.x) + 0.5) * CELL_SIZE,
-		0.0,
-		BOARD_ORIGIN.y + (float(grid_position.y) + 0.5) * CELL_SIZE
-	)
+	return BOARD_ORIGIN + Vector3((float(grid_position.x) + 0.5) * CELL_SIZE, 0.0, (float(grid_position.y) + 0.5) * CELL_SIZE)
+
+func world_to_cell(world_position: Vector3) -> Vector2i:
+	var local := (world_position - BOARD_ORIGIN) / CELL_SIZE
+	return Vector2i(floor(local.x), floor(local.z))
+
+func snap_to_grid(world_position: Vector3) -> Dictionary:
+	var grid_position := world_to_cell(world_position)
+	var clamped := Vector2i(clampi(grid_position.x, 0, GRID_COLUMNS - 1), clampi(grid_position.y, 0, GRID_ROWS - 1))
+	return {"grid": clamped, "world_position": cell_to_world(clamped), "distance": world_position.distance_to(cell_to_world(clamped))}
+
+func preview_deployment(module_kind: String, world_position: Vector3, rotation := 0) -> Dictionary:
+	if simulation == null:
+		return {"valid": false, "reason": "simulation_unavailable"}
+	var snap := snap_to_grid(world_position)
+	var preview: Dictionary = simulation.preview_placement(module_kind, snap.grid, rotation)
+	preview["world_position"] = snap.world_position
+	preview["snap_distance"] = snap.distance
+	return preview
+
+func deploy_module_at_cell(module_kind: String, grid_position: Vector2i, rotation := 0) -> String:
+	return deploy_module(module_kind, cell_to_world(grid_position), rotation)
+
+func deploy_module(module_kind: String, world_position: Vector3, rotation := 0) -> String:
+	var preview := preview_deployment(module_kind, world_position, rotation)
+	var grid_position: Vector2i = _state_grid(preview)
+	if not bool(preview.get("valid", false)):
+		deployment_rejected.emit(module_kind, grid_position, str(preview.get("reason", "invalid")))
+		return ""
+	var module_id := str(simulation.build_module(module_kind, grid_position, rotation))
+	if module_id.is_empty():
+		return ""
+	sync_snapshot(simulation.get_snapshot())
+	deployment_snapped.emit(module_id, grid_position, preview.world_position)
+	return module_id
+
+func deploy_bench_item_at_cell(bench_index: int, grid_position: Vector2i, rotation := 0) -> String:
+	if simulation == null:
+		return ""
+	var module_id := str(simulation.deploy_bench_item(bench_index, grid_position, rotation))
+	if not module_id.is_empty():
+		sync_snapshot(simulation.get_snapshot())
+		deployment_snapped.emit(module_id, grid_position, cell_to_world(grid_position))
+	return module_id
+
+func move_module_to_cell(module_id: String, grid_position: Vector2i) -> bool:
+	if simulation == null or not simulation.modules.has(module_id):
+		return false
+	var state: Dictionary = simulation.modules[module_id]
+	var preview: Dictionary = simulation.preview_placement(str(state.get("kind", "")), grid_position, int(state.get("rotation", 0)), module_id)
+	if not bool(preview.get("valid", false)):
+		return false
+	var moved: bool = bool(simulation.move_module(module_id, grid_position))
+	if moved:
+		sync_snapshot(simulation.get_snapshot())
+		deployment_snapped.emit(module_id, grid_position, cell_to_world(grid_position))
+	return moved
 
 func sync_snapshot(snapshot: Dictionary) -> void:
 	_ensure_world_nodes()
 	var modules_state := _state_map(snapshot.get("modules", {}))
 	var enemies_state := _state_map(snapshot.get("enemies", {}))
-	for module_id in module_areas.keys().duplicate():
-		if not modules_state.has(module_id):
-			var stale_module: Node = module_areas[module_id]
-			module_areas.erase(module_id)
+	for id in module_areas.keys().duplicate():
+		if not modules_state.has(id):
+			var stale_module: Node = module_areas[id]
+			module_areas.erase(id)
 			stale_module.queue_free()
-	for enemy_id in enemy_bodies.keys().duplicate():
-		if not enemies_state.has(enemy_id):
-			var stale_enemy: Node = enemy_bodies[enemy_id]
-			enemy_bodies.erase(enemy_id)
+	for id in enemy_bodies.keys().duplicate():
+		if not enemies_state.has(id):
+			var stale_enemy: Node = enemy_bodies[id]
+			enemy_bodies.erase(id)
 			stale_enemy.queue_free()
-	for module_id in modules_state.keys():
-		var module_state: Dictionary = modules_state[module_id]
-		var module_area: BastionModuleArea3D = module_areas.get(module_id)
-		if module_area == null or not is_instance_valid(module_area):
-			module_area = MODULE_AREA_SCRIPT.new()
-			module_area.name = "ModuleArea3D_%s" % module_id
-			module_container.add_child(module_area)
-			module_areas[module_id] = module_area
-		module_area.configure(module_state, cell_to_world(_state_grid(module_state)))
-	for enemy_id in enemies_state.keys():
-		var enemy_state: Dictionary = enemies_state[enemy_id]
-		var actor: BastionEnemyActor3D = enemy_bodies.get(enemy_id)
+	for id in modules_state.keys():
+		var area: BastionModuleArea3D = module_areas.get(id)
+		if area == null or not is_instance_valid(area):
+			area = MODULE_AREA_SCRIPT.new()
+			area.name = "ModuleArea3D_%s" % id
+			module_container.add_child(area)
+			module_areas[id] = area
+		area.configure(modules_state[id], cell_to_world(_state_grid(modules_state[id])))
+	for id in enemies_state.keys():
+		var actor: BastionEnemyActor3D = enemy_bodies.get(id)
 		if actor == null or not is_instance_valid(actor):
 			actor = ENEMY_ACTOR_SCRIPT.new()
-			actor.name = "EnemyActor3D_%s" % enemy_id
+			actor.name = "EnemyActor3D_%s" % id
 			enemy_container.add_child(actor)
-			enemy_bodies[enemy_id] = actor
-		actor.configure(enemy_state, route_curve)
+			enemy_bodies[id] = actor
+		actor.configure(enemies_state[id], route_curve)
 
 func step_world(delta: float) -> void:
 	if not _ready_nodes:
@@ -121,10 +216,10 @@ func step_world(delta: float) -> void:
 
 func query_modules_near(world_position: Vector3, radius: float) -> Array:
 	var result: Array = []
-	for module_id in module_areas.keys():
-		var area: BastionModuleArea3D = module_areas[module_id]
+	for id in module_areas.keys():
+		var area: BastionModuleArea3D = module_areas[id]
 		if is_instance_valid(area) and area.global_position.distance_to(world_position) <= radius + area.contact_radius:
-			result.append(str(module_id))
+			result.append(str(id))
 	return result
 
 func get_enemy_actor_count() -> int:
@@ -141,8 +236,8 @@ func _query_collisions() -> void:
 		if not is_instance_valid(actor):
 			continue
 		for module_id in module_areas.keys():
-			var module_area: BastionModuleArea3D = module_areas[module_id]
-			if is_instance_valid(module_area) and actor.global_position.distance_to(module_area.global_position) <= module_area.contact_radius + actor.hit_radius:
+			var area: BastionModuleArea3D = module_areas[module_id]
+			if is_instance_valid(area) and actor.global_position.distance_to(area.global_position) <= area.contact_radius + actor.hit_radius:
 				touched["%s:%s" % [enemy_id, module_id]] = enemy_id
 		if is_inside_tree() and get_world_3d() != null:
 			var query_shape := SphereShape3D.new()
@@ -163,14 +258,14 @@ func _query_collisions() -> void:
 
 func _register_hit(enemy_id: String, module_id: String) -> void:
 	var key := "%s:%s" % [enemy_id, module_id]
-	if float(_hit_cooldowns.get(key, 0.0)) > 0.0:
+	if float(_hit_cooldowns.get(key, 0.0)) > 0.0 or simulation == null:
 		return
-	var module_area: BastionModuleArea3D = module_areas.get(module_id)
-	if module_area == null or not is_instance_valid(module_area):
+	var area: BastionModuleArea3D = module_areas.get(module_id)
+	if area == null or not is_instance_valid(area):
 		return
 	var enemy_state: Dictionary = _state_map(simulation.get_snapshot().get("enemies", {})).get(enemy_id, {})
 	var damage := maxi(1, int(enemy_state.get("damage", 1)))
-	module_area.receive_hit(enemy_id, damage)
+	area.receive_hit(enemy_id, damage)
 	_hit_cooldowns[key] = 0.35
 	enemy_hit.emit(enemy_id, module_id, damage)
 
@@ -183,11 +278,15 @@ func _update_hit_cooldowns(delta: float) -> void:
 			_hit_cooldowns[key] = remaining
 
 func _check_breaches() -> void:
-	for enemy_id in enemy_bodies.keys():
-		var actor: BastionEnemyActor3D = enemy_bodies[enemy_id]
-		if not is_instance_valid(actor) or actor.get_path_progress() < 0.995:
+	if simulation == null:
+		return
+	for id in enemy_bodies.keys():
+		var actor: BastionEnemyActor3D = enemy_bodies[id]
+		if not is_instance_valid(actor) or actor.get_path_progress() < 0.995 or _breach_seen.has(id):
 			continue
-		enemy_breached.emit(str(enemy_id), 1)
+		_breach_seen[id] = true
+		var state: Dictionary = _state_map(simulation.get_snapshot().get("enemies", {})).get(id, {})
+		enemy_breached.emit(str(id), maxi(1, int(state.get("damage", 1))))
 
 func _state_map(value: Variant) -> Dictionary:
 	if value is Dictionary:
