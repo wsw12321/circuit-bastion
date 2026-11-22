@@ -121,6 +121,6 @@ func _end_pinch() -> void:
 
 func _apply_transform() -> void:
 	var horizontal := cos(pitch) * zoom_distance
-	# Positive pitch keeps the camera above the board for a readable isometric composition.
-	position = target + Vector3(sin(yaw) * horizontal, sin(pitch) * zoom_distance, cos(yaw) * horizontal)
+	# Negative pitch keeps the camera above the board for a readable isometric composition.
+	position = target + Vector3(sin(yaw) * horizontal, -sin(pitch) * zoom_distance, cos(yaw) * horizontal)
 	look_at(target, Vector3.UP)
