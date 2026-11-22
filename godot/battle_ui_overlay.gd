@@ -323,7 +323,7 @@ func _shop_items() -> Array:
 
 
 func _bench_items() -> Array:
-	var value := _view_value("bench_items", [])
+	var value: Variant = _view_value("bench_items", [])
 	return value as Array if value is Array else []
 
 
