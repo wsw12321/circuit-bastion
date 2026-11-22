@@ -1097,5 +1097,101 @@ func _start_result_transition(result: String) -> void:
 		wave_banner_color = Color("#ff6b75")
 	wave_banner_time = 3.0
 
+
+func _signal_route(origin: Vector2, cell_size: float) -> PackedVector2Array:
+	return PackedVector2Array([
+		_cell_center(origin, cell_size, Vector2i(0, 3)),
+		_cell_center(origin, cell_size, Vector2i(3, 2)),
+		_cell_center(origin, cell_size, Vector2i(5, 3)),
+		_cell_center(origin, cell_size, Vector2i(7, 3)),
+	])
+
+func _route_position(points: PackedVector2Array, progress: float) -> Vector2:
+	if points.size() < 2:
+		return Vector2.ZERO
+	var scaled := clampf(progress, 0.0, 0.999) * float(points.size() - 1)
+	var segment := clampi(int(floor(scaled)), 0, points.size() - 2)
+	return points[segment].lerp(points[segment + 1], scaled - float(segment))
+
+func _cell_for_token(token: String) -> Vector2i:
+	var normalized := token.to_lower()
+	for module in modules:
+		if str(module.get("id", "")).to_lower() == normalized or str(module.get("kind", "")).to_lower() == normalized:
+			return _module_cell(module)
+	if normalized.find("scanner") >= 0:
+		return Vector2i(1, 1)
+	if normalized.find("router") >= 0:
+		return Vector2i(3, 2)
+	if normalized.find("cool") >= 0 or normalized.find("heat") >= 0:
+		return Vector2i(6, 1)
+	if normalized.find("battery") >= 0 or normalized.find("capac") >= 0:
+		return Vector2i(2, 4)
+	return Vector2i(5, 3)
+
+func _draw_route_fx(origin: Vector2, cell_size: float) -> void:
+	var points := _signal_route(origin, cell_size)
+	for fx_value in fx_items:
+		var fx: Dictionary = fx_value
+		var kind := str(fx.get("kind", ""))
+		var color: Color = fx.get("color", Color("#72d7ff"))
+		var age := float(fx.get("age", 0.0))
+		var duration := maxf(0.01, float(fx.get("duration", 0.5)))
+		var progress := clampf(float(fx.get("progress", 0.62)), 0.0, 1.0)
+		var fade := 1.0 - clampf(age / duration, 0.0, 1.0)
+		var center := _route_position(points, progress)
+		if kind in ["attack", "hit"]:
+			if kind == "attack":
+				var source := _cell_center(origin, cell_size, _cell_for_token(str(fx.get("source", "pulse_cannon"))))
+				var head := source.lerp(center, clampf(age / duration, 0.0, 1.0))
+				var tail := source.lerp(center, maxf(0.0, age / duration - 0.24))
+				draw_line(tail, head, Color(color, fade * 0.34), 9.0)
+				draw_line(tail, head, Color("#fff5d6", fade * 0.92), 2.0)
+				draw_circle(head, 9.0 + 3.0 * fade, Color(color, fade * 0.16), true)
+				draw_circle(head, 4.0 + 2.0 * fade, Color("#fff5d6", fade), true)
+			else:
+				var radius := 12.0 + (1.0 - fade) * 34.0
+				draw_circle(center, radius, Color(color, fade * 0.10), true)
+				draw_arc(center, radius, -phase, -phase + TAU * 0.88, 28, Color(color, fade), 3.0)
+				for spark in range(6):
+					var angle := phase + float(spark) * TAU / 6.0
+					var inner := center + Vector2(cos(angle), sin(angle)) * radius * 0.42
+					var outer := center + Vector2(cos(angle), sin(angle)) * (radius + 8.0) * 0.68
+					draw_line(inner, outer, Color(color, fade), 2.0)
+		elif kind in ["overheat", "reconnect"]:
+			var module_center := _cell_center(origin, cell_size, _cell_for_token(str(fx.get("source", "pulse_cannon"))))
+			var radius := 18.0 + sin(phase * 2.0) * 3.0
+			draw_circle(module_center, radius + 8.0, Color(color, fade * 0.10), true)
+			draw_arc(module_center, radius, phase, phase + TAU * 0.86, 28, Color(color, fade), 3.0)
+			draw_circle(module_center, 5.0 + fade * 4.0, Color(color, fade), true)
+		elif kind == "disconnect":
+			var module_center := _cell_center(origin, cell_size, _cell_for_token(str(fx.get("source", "pulse_cannon"))))
+			var size := 18.0 + (1.0 - fade) * 8.0
+			draw_line(module_center - Vector2(size, size), module_center + Vector2(size, size), Color(color, fade), 3.0)
+			draw_line(module_center + Vector2(size, -size), module_center - Vector2(size, -size), Color(color, fade), 3.0)
+			draw_arc(module_center, size + 5.0, phase, phase + TAU * 0.75, 20, Color(color, fade * 0.7), 2.0)
+		elif kind == "breach":
+			var core := _cell_center(origin, cell_size, Vector2i(7, 3))
+			var radius := 12.0 + (1.0 - fade) * cell_size * 0.72
+			draw_circle(core, radius, Color(color, fade * 0.12), true)
+			draw_arc(core, radius, -phase, -phase + TAU * 0.9, 32, Color(color, fade), 4.0)
+			draw_line(core - Vector2(radius, 0), core + Vector2(radius, 0), Color(color, fade * 0.6), 2.0)
+
+func _draw_fx_overlay(size: Vector2) -> void:
+	if wave_banner_time > 0.0 and not wave_banner_text.is_empty():
+		var fade := clampf(wave_banner_time / 0.34, 0.0, 1.0)
+		var banner := Rect2(Vector2(0, TOP_BAR_HEIGHT + 4.0), Vector2(size.x, 54.0))
+		draw_rect(banner, Color("#0b202a", 0.92 * fade), true)
+		draw_line(banner.position + Vector2(0, banner.size.y), banner.position + Vector2(banner.size.x, banner.size.y), Color(wave_banner_color, 0.8 * fade), 2.0)
+		draw_string(ThemeDB.fallback_font, banner.position + Vector2(0, 24), wave_banner_text, HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, Color(wave_banner_color, fade))
+		draw_string(ThemeDB.fallback_font, banner.position + Vector2(0, 43), "DETERMINISTIC EVENT BROADCAST", HORIZONTAL_ALIGNMENT_CENTER, size.x, 9, Color("#9fb8c1", fade))
+	if bool(snapshot.get("finished", false)):
+		var victory_state := bool(snapshot.get("victory", false))
+		var color := Color("#68e3bf") if victory_state else Color("#ff6b75")
+		var fade_result := clampf(0.30 + result_transition_time * 0.18, 0.0, 0.74)
+		draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", fade_result), true)
+		var title := "SYSTEM VICTORY" if victory_state else "CORE BREACHED"
+		draw_string(ThemeDB.fallback_font, Vector2(0, size.y * 0.52), title, HORIZONTAL_ALIGNMENT_CENTER, size.x, 32, color)
+		draw_string(ThemeDB.fallback_font, Vector2(0, size.y * 0.52 + 30), "点击底部「重试」重新编译防线", HORIZONTAL_ALIGNMENT_CENTER, size.x, 12, Color("#c6dbe1", minf(1.0, fade_result + 0.2)))
+
 func _cell_center(origin: Vector2, cell_size: float, cell: Vector2i) -> Vector2:
 	return origin + (Vector2(cell) + Vector2(0.5, 0.5)) * cell_size
