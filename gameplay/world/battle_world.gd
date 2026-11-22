@@ -132,7 +132,7 @@ func deploy_bench_item_at_cell(bench_index: int, grid_position: Vector2i, rotati
 func move_module_to_cell(module_id: String, grid_position: Vector2i) -> bool:
 	if simulation == null:
 		return false
-	var preview := simulation.preview_placement(
+	var preview: Dictionary = simulation.preview_placement(
 		str(simulation.modules.get(module_id, {}).get("kind", "")),
 		grid_position,
 		int(simulation.modules.get(module_id, {}).get("rotation", 0)),
