@@ -42,6 +42,7 @@ func _run() -> void:
 	if view == null or not view.has_method("_cell_at_mobile"):
 		_fail("touch-capable MobileBattleView could not be instantiated")
 		return
+	view.free()
 	print("ANDROID_SMOKE_OK preset=Android arm64=enabled touch=screen")
 	quit(0)
 
