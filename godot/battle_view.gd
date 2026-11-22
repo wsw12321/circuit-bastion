@@ -405,9 +405,11 @@ func _sync_enemy_art(tick: int) -> void:
 			enemy_hit_flash[enemy_id] = 1.0
 		enemy_hp_cache[enemy_id] = hp
 		enemy_last_state[enemy_id] = enemy.duplicate(true)
+	var missing_ids: Array = []
 	for enemy_id in enemy_last_state.keys():
-		if current.has(enemy_id):
-			continue
+		if not current.has(enemy_id):
+			missing_ids.append(enemy_id)
+	for enemy_id in missing_ids:
 		var previous: Dictionary = enemy_last_state[enemy_id]
 		var previous_label := str(previous.get("label", "目标"))
 		enemy_death_effects.append({
