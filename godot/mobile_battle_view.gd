@@ -23,31 +23,38 @@ func _draw() -> void:
 	_draw_mobile(size)
 
 func _draw_mobile(size: Vector2) -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017"))
+	if size.x <= 0.0 or size.y <= 0.0:
+		return
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", 0.14 if use_3d_battlefield else 1.0))
 	_draw_mobile_top_bar(size)
 	var metrics := _mobile_grid(size)
 	var board: Rect2 = metrics["board"]
 	var origin: Vector2 = metrics["origin"]
 	var cell_size: float = metrics["cell_size"]
-	# Keep silhouettes, labels, and health bars legible across narrow phones.
-	character_scale = clampf(cell_size / 56.0, 0.62, 1.0)
-	draw_rect(board, Color("#091923"), true)
-	draw_rect(board, Color("#1c3c4b"), false, 1.0)
-	draw_rect(Rect2(board.position + Vector2(7, 7), board.size - Vector2(14, 14)), Color("#112b36"), false, 1.0)
-	draw_string(ThemeDB.fallback_font, board.position + Vector2(14, 25), "SECTOR 07 / TOUCH GRID", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7e8ed"))
-	draw_string(ThemeDB.fallback_font, board.position + Vector2(board.size.x - 142, 25), "TICK %06d" % int(snapshot.get("tick", 0)), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#6f929f"))
-	for row in GRID_ROWS:
-		for column in GRID_COLUMNS:
-			var cell := Vector2i(column, row)
-			var rect := Rect2(origin + Vector2(column, row) * cell_size + Vector2(2, 2), Vector2(cell_size - 4, cell_size - 4))
-			var fill := Color("#173745") if cell == hover_cell else Color("#0d222c")
-			draw_rect(rect, fill, true)
-			draw_rect(rect, Color("#1b3b48"), false, 1.0)
-	_draw_routes(origin, cell_size)
-	_draw_board_markers(origin, cell_size)
-	_draw_modules(origin, cell_size)
-	_draw_enemies(origin, cell_size)
-	draw_string(ThemeDB.fallback_font, board.position + Vector2(14, board.size.y - 13), "点按格子选择模块 · 路由 %s" % (route_focus if route_focus != "" else "SIGNAL"), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7697a4"))
+	if use_3d_battlefield:
+		draw_rect(board, Color("#091923", 0.12), true)
+		draw_rect(board, Color("#1c3c4b", 0.62), false, 1.0)
+		draw_string(ThemeDB.fallback_font, board.position + Vector2(14, 25), "SECTOR 07 / 3D TOUCH BATTLEFIELD", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7e8ed"))
+		draw_string(ThemeDB.fallback_font, board.position + Vector2(14, board.size.y - 13), "拖动旋转 · 双指缩放/旋转", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7697a4"))
+	else:
+		character_scale = clampf(cell_size / 56.0, 0.62, 1.0)
+		draw_rect(board, Color("#091923"), true)
+		draw_rect(board, Color("#1c3c4b"), false, 1.0)
+		draw_rect(Rect2(board.position + Vector2(7, 7), board.size - Vector2(14, 14)), Color("#112b36"), false, 1.0)
+		draw_string(ThemeDB.fallback_font, board.position + Vector2(14, 25), "SECTOR 07 / TOUCH GRID", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7e8ed"))
+		draw_string(ThemeDB.fallback_font, board.position + Vector2(board.size.x - 142, 25), "TICK %06d" % int(snapshot.get("tick", 0)), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#6f929f"))
+		for row in GRID_ROWS:
+			for column in GRID_COLUMNS:
+				var cell := Vector2i(column, row)
+				var rect := Rect2(origin + Vector2(column, row) * cell_size + Vector2(2, 2), Vector2(cell_size - 4, cell_size - 4))
+				var fill := Color("#173745") if cell == hover_cell else Color("#0d222c")
+				draw_rect(rect, fill, true)
+				draw_rect(rect, Color("#1b3b48"), false, 1.0)
+		_draw_routes(origin, cell_size)
+		_draw_board_markers(origin, cell_size)
+		_draw_modules(origin, cell_size)
+		_draw_enemies(origin, cell_size)
+		draw_string(ThemeDB.fallback_font, board.position + Vector2(14, board.size.y - 13), "点按格子选择模块 · 路由 %s" % (route_focus if route_focus != "" else "SIGNAL"), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7697a4"))
 	_draw_mobile_bottom_bar(size)
 
 func _draw_mobile_top_bar(size: Vector2) -> void:
