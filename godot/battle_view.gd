@@ -477,7 +477,8 @@ func _draw_enemies(origin: Vector2, cell_size: float) -> void:
 			draw_line(center + Vector2(art_size * 0.58, art_size * 0.94), center + Vector2(art_size * 0.78, art_size * 0.94), Color("#ffca62", 0.68), 2.0)
 		elif hit_intensity > 0.0:
 			draw_arc(center, art_size * 0.92, -phase, -phase + 4.1, 22, Color(art_color, 0.26 * hit_intensity), 1.5)
-		CHARACTER_ART.draw_enemy(self, center, art_size, kind, "hit" if hit_intensity > 0.0 else "idle", phase, hit_intensity)
+		var animation_state := _enemy_animation_state(enemy, hit_intensity)
+		CHARACTER_ART.draw_enemy(self, center, art_size, kind, animation_state, phase, hit_intensity)
 		var hp_ratio := clampf(float(enemy.get("hp", 1.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0))), 0.0, 1.0)
 		var width_scale := maxf(0.78, character_scale)
 		var bar_width := (58.0 if is_boss else 34.0) * width_scale
@@ -496,6 +497,21 @@ func _sort_enemy_draw_order(left: Dictionary, right: Dictionary) -> bool:
 		return str(left.get("kind", "")) == "boss"
 	return left_progress < right_progress
 
+
+func _enemy_animation_state(enemy: Dictionary, hit_intensity: float) -> String:
+	if hit_intensity > 0.0:
+		return "hit"
+	if paused:
+		return "idle"
+	var kind := str(enemy.get("kind", "scout"))
+	var serial_text := str(enemy.get("id", "0")).replace("E", "")
+	var serial := float(int(serial_text)) if serial_text.is_valid_int() else 0.0
+	var progress := float(enemy.get("progress", 0.0))
+	var cycle := phase * (0.95 if kind == "boss" else 1.15) + serial * 0.77 + progress * 4.0
+	var attack_threshold := 0.80 if kind == "boss" else 0.92
+	if sin(cycle) > attack_threshold:
+		return "attack"
+	return "move" if absf(cos(cycle * 1.7)) > 0.18 else "idle"
 
 func _infer_enemy_kind(label: String) -> String:
 	var labels := {
