@@ -1,7 +1,8 @@
 extends SceneTree
 
 ## Headless-safe probe for the procedural audio feedback bus.
-## It checks that every semantic cue is emitted even when playback is skipped.
+## It checks semantic cues, priority metadata, rhythm sequencing, settings, and
+## playback skipping when no audio device is available.
 
 const AudioFeedbackBus = preload("res://scripts/audio_feedback.gd")
 
@@ -21,13 +22,41 @@ func _run() -> void:
 	if bus._stream_for("button") != replacement_stream:
 		_fail("resource slot did not override generated button stream")
 		return
+	if bus.priority_for("defeat") <= bus.priority_for("attack"):
+		_fail("defeat priority must exceed attack priority")
+		return
+	bus.set_priority("attack", 80)
+	if bus.priority_for("attack") != 80:
+		_fail("priority override was not applied")
+		return
+	bus.set_priority("attack", 40)
+	bus.set_volume(0.75)
+	bus.set_mobile_audio_volume(0.5)
+	bus.set_mobile_audio_muted(true)
+	var settings := bus.audio_settings()
+	if absf(float(settings.get("volume", 0.0)) - 0.75) > 0.001:
+		_fail("master volume setting was not retained")
+		return
+	if absf(float(settings.get("mobile_volume", 0.0)) - 0.5) > 0.001:
+		_fail("mobile volume setting was not retained")
+		return
+	if not bool(settings.get("mobile_muted", false)):
+		_fail("mobile mute setting was not retained")
+		return
+	bus.set_mobile_audio_muted(false)
+	bus.set_mobile_audio_volume(1.0)
 	var received: Array[String] = []
 	bus.feedback_emitted.connect(func(kind: String, _payload: Dictionary) -> void:
 		received.append(kind)
 	)
 	bus.emit_feedback("button", {"command": "pause"})
 	bus.emit_feedback("deploy", {"module": "pulse_cannon"})
-	bus.emit_feedback("attack", {"target": "E001"})
+	bus.emit_feedback("attack", {"target": "E001", "tick": 1})
+	bus.emit_feedback("attack", {"target": "E002", "tick": 2})
+	var attack_rhythm: Dictionary = bus.history()[0].get("rhythm", {})
+	if int(attack_rhythm.get("step", -1)) != 1:
+		_fail("attack rhythm did not advance to the second step")
+		return
 	bus.emit_feedback("alert", {"source": "E001"})
 	bus.emit_feedback("victory", {})
 	bus.emit_feedback("defeat", {})
@@ -36,16 +65,20 @@ func _run() -> void:
 	bus.emit_simulation_event({"kind": "breach", "source": "E001"})
 	bus.emit_simulation_event({"kind": "victory"})
 	bus.emit_simulation_event({"kind": "defeat"})
-	if received.size() != 11:
-		_fail("expected 11 feedback events, got %d" % received.size())
+	if received.size() != 12:
+		_fail("expected 12 feedback events, got %d" % received.size())
 		return
-	if bus.history().size() != 11:
+	if bus.history().size() != 12:
 		_fail("history did not retain emitted events")
 		return
-	if not bus.history()[0].has("played"):
-		_fail("history entry missing playback state")
+	var final_record: Dictionary = bus.history()[0]
+	if int(final_record.get("priority", 0)) != bus.priority_for("defeat"):
+		_fail("defeat priority metadata was not recorded")
 		return
-	print("AUDIO_FEEDBACK_OK available=%s events=%d" % [bus.is_audio_available(), received.size()])
+	if not bool(final_record.get("rhythm", {}).get("accent", false)):
+		_fail("terminal cue did not receive a rhythm accent")
+		return
+	print("AUDIO_FEEDBACK_OK available=%s events=%d settings=%s" % [bus.is_audio_available(), received.size(), bus.audio_settings()])
 	quit(0)
 
 func _fail(message: String) -> void:
