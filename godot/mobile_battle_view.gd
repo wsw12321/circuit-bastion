@@ -23,7 +23,7 @@ func _draw() -> void:
 	_draw_mobile(size)
 
 func _draw_mobile(size: Vector2) -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017"))
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", 0.58))
 	_draw_mobile_top_bar(size)
 	var metrics := _mobile_grid(size)
 	var board: Rect2 = metrics["board"]
@@ -31,7 +31,7 @@ func _draw_mobile(size: Vector2) -> void:
 	var cell_size: float = metrics["cell_size"]
 	# Keep silhouettes, labels, and health bars legible across narrow phones.
 	character_scale = clampf(cell_size / 56.0, 0.62, 1.0)
-	draw_rect(board, Color("#091923"), true)
+	draw_rect(board, Color("#091923", 0.48), true)
 	draw_rect(board, Color("#1c3c4b"), false, 1.0)
 	draw_rect(Rect2(board.position + Vector2(7, 7), board.size - Vector2(14, 14)), Color("#112b36"), false, 1.0)
 	draw_string(ThemeDB.fallback_font, board.position + Vector2(14, 25), "SECTOR 07 / TOUCH GRID", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d7e8ed"))
