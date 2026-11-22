@@ -226,7 +226,7 @@ func get_enemy_actor_count() -> int:
 	return enemy_bodies.size()
 
 func get_enemy_position(enemy_id: String) -> Vector3:
-	var actor: BastionEnemyActor3D = enemy_bodies.get(enemy_id)
+	var actor = enemy_bodies.get(enemy_id)
 	return actor.global_position if actor != null and is_instance_valid(actor) else Vector3.INF
 
 func _query_collisions() -> void:
