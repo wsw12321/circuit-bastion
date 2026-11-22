@@ -22,6 +22,7 @@ func _ready() -> void:
 	simulation = SIMULATION_SCRIPT.new(2048)
 	world = BATTLE_WORLD_SCRIPT.new()
 	world.name = "BattleWorld"
+	world.set_mobile_layout(OS.has_feature("mobile") or OS.has_feature("android"))
 	add_child(world)
 	world.setup(simulation)
 	view = select_view_script(OS.has_feature("mobile") or OS.has_feature("android")).new()

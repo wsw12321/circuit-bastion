@@ -40,6 +40,7 @@ var _energy_route_points: Array[Vector3] = []
 var _signal_packet: MeshInstance3D
 var _energy_packet: MeshInstance3D
 var _entry_portal: MeshInstance3D
+var mobile_layout := OS.has_feature("mobile") or OS.has_feature("android")
 
 func _ready() -> void:
 	_ensure_world_nodes()
@@ -61,6 +62,13 @@ func _process(delta: float) -> void:
 func setup(value: RefCounted) -> void:
 	simulation = value
 	_ensure_world_nodes()
+
+func set_mobile_layout(enabled: bool) -> void:
+	mobile_layout = enabled
+	# setup() creates the camera before the view is attached, so mobile callers
+	# set this flag before setup. Keep the setter harmless for late callers.
+	if _ready_nodes:
+		_apply_camera_composition()
 
 func _ensure_world_nodes() -> void:
 	if _ready_nodes:
@@ -100,12 +108,14 @@ func _create_environment() -> void:
 	environment.background_color = Color("#050b12")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color("#77a9bd")
-	environment.ambient_light_energy = 0.48
+	# Keep the authored neon accents visible without washing every silhouette
+	# into white when the camera is pitched down over the board.
+	environment.ambient_light_energy = 0.40
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.tonemap_exposure = 1.18
 	environment.glow_enabled = true
-	environment.glow_intensity = 0.7
-	environment.glow_bloom = 0.14
+	environment.glow_intensity = 0.46
+	environment.glow_bloom = 0.08
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#102834")
 	environment.fog_density = 0.008
@@ -209,28 +219,13 @@ func _create_camera() -> void:
 				camera = child as Camera3D
 				break
 	if camera == null or not camera.has_method("rotate_orbit"):
-			camera = CAMERA_SCRIPT.new()
-			camera.name = "BattleCamera3D"
-			add_child(camera)
+		camera = CAMERA_SCRIPT.new()
+		camera.name = "BattleCamera3D"
+		add_child(camera)
 	# Compose the native board inside the desktop battlefield window instead of
 	# centering it under the right-side inspector. Portrait Android keeps the
 	# world centered and backs the camera away to avoid cropping the corners.
-	var viewport_size := get_viewport().get_visible_rect().size
-	# Android keeps a portrait logical viewport even when the project starts
-	# from the desktop 1440×900 defaults. Prefer the touch composition on mobile
-	# instead of inferring layout solely from that initial viewport size.
-	var mobile_layout := OS.has_feature("mobile") or OS.has_feature("android")
-	var wide_layout := not mobile_layout and viewport_size.x / maxf(1.0, viewport_size.y) > 1.25
-	var composition_target := Vector3(1.8, 0.16, 0.0) if wide_layout else Vector3(0.0, 0.16, 0.0)
-	var composition_zoom := 20.0 if wide_layout else 23.0
-	camera.set("target", composition_target)
-	camera.set("zoom_distance", composition_zoom)
-	camera.set("target_zoom_distance", composition_zoom)
-	camera.set("pitch", -0.78)
-	camera.set("target_pitch", -0.78)
-	camera.set("yaw", 0.32)
-	camera.set("target_yaw", 0.32)
-	camera.current = true
+	_apply_camera_composition()
 
 	var key_light: DirectionalLight3D = get_node_or_null("KeyLight")
 	if key_light == null:
@@ -241,7 +236,7 @@ func _create_camera() -> void:
 		add_child(key_light)
 	key_light.rotation_degrees = Vector3(-55.0, -28.0, 0.0)
 	key_light.light_color = Color("#b9e5ff")
-	key_light.light_energy = 1.35
+	key_light.light_energy = 1.15
 	key_light.shadow_enabled = true
 	key_light.directional_shadow_max_distance = 40.0
 
@@ -252,7 +247,7 @@ func _create_camera() -> void:
 		add_child(rim_light)
 	rim_light.rotation_degrees = Vector3(-28.0, 148.0, 0.0)
 	rim_light.light_color = Color("#5b7dff")
-	rim_light.light_energy = 0.34
+	rim_light.light_energy = 0.25
 	rim_light.shadow_enabled = false
 
 	var fill: OmniLight3D = get_node_or_null("FillLight")
@@ -265,8 +260,23 @@ func _create_camera() -> void:
 	fill.position = Vector3(0.0, 6.0, 3.0)
 	fill.omni_range = 30.0
 	fill.light_color = Color("#4b8fa9")
-	fill.light_energy = 1.1
+	fill.light_energy = 0.82
 
+func _apply_camera_composition() -> void:
+	if camera == null or not is_instance_valid(camera):
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var wide_layout := not mobile_layout and viewport_size.x / maxf(1.0, viewport_size.y) > 1.25
+	var composition_target := Vector3(1.8, 0.16, 0.0) if wide_layout else Vector3(0.0, 0.16, 0.0)
+	var composition_zoom := 20.0 if (wide_layout or mobile_layout) else 23.0
+	camera.set("target", composition_target)
+	camera.set("zoom_distance", composition_zoom)
+	camera.set("target_zoom_distance", composition_zoom)
+	camera.set("pitch", -0.78)
+	camera.set("target_pitch", -0.78)
+	camera.set("yaw", 0.32)
+	camera.set("target_yaw", 0.32)
+	camera.current = true
 
 func handle_camera_input(event: InputEvent) -> bool:
 	if camera == null or not is_instance_valid(camera):
