@@ -216,7 +216,11 @@ func _create_camera() -> void:
 	# centering it under the right-side inspector. Portrait Android keeps the
 	# world centered and backs the camera away to avoid cropping the corners.
 	var viewport_size := get_viewport().get_visible_rect().size
-	var wide_layout := viewport_size.x / maxf(1.0, viewport_size.y) > 1.25
+	# Android keeps a portrait logical viewport even when the project starts
+	# from the desktop 1440×900 defaults. Prefer the touch composition on mobile
+	# instead of inferring layout solely from that initial viewport size.
+	var mobile_layout := OS.has_feature("mobile") or OS.has_feature("android")
+	var wide_layout := not mobile_layout and viewport_size.x / maxf(1.0, viewport_size.y) > 1.25
 	var composition_target := Vector3(1.8, 0.16, 0.0) if wide_layout else Vector3(0.0, 0.16, 0.0)
 	var composition_zoom := 20.0 if wide_layout else 23.0
 	camera.set("target", composition_target)
