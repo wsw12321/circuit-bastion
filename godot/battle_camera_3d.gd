@@ -7,7 +7,7 @@ signal camera_changed(yaw: float, pitch: float, zoom_distance: float)
 
 @export var target := Vector3(0.0, 0.0, 0.0)
 @export_range(4.0, 24.0, 0.1) var zoom_distance := 16.0
-@export_range(0.15, 1.3, 0.01) var pitch := 0.72
+@export_range(-1.3, -0.15, 0.01) var pitch := -0.72
 @export_range(-3.14, 3.14, 0.01) var yaw := 0.35
 @export_range(6.0, 24.0, 0.1) var smoothing := 14.0
 @export_range(0.001, 0.03, 0.001) var orbit_sensitivity := 0.008
@@ -15,7 +15,7 @@ signal camera_changed(yaw: float, pitch: float, zoom_distance: float)
 @export_range(0.001, 0.1, 0.001) var pinch_zoom_sensitivity := 0.018
 
 var target_zoom_distance := 16.0
-var target_pitch := 0.72
+var target_pitch := -0.72
 var target_yaw := 0.35
 var interaction_enabled := true
 
@@ -85,7 +85,7 @@ func handle_input(event: InputEvent) -> bool:
 
 func rotate_orbit(delta: Vector2) -> void:
 	target_yaw = wrapf(target_yaw + delta.x * orbit_sensitivity, -PI, PI)
-	target_pitch = clampf(target_pitch + delta.y * orbit_sensitivity, 0.15, 1.3)
+	target_pitch = clampf(target_pitch + delta.y * orbit_sensitivity, -1.3, -0.15)
 	camera_changed.emit(target_yaw, target_pitch, target_zoom_distance)
 
 func zoom_by(delta: float) -> void:
@@ -94,7 +94,7 @@ func zoom_by(delta: float) -> void:
 
 func reset_view() -> void:
 	target_zoom_distance = 16.0
-	target_pitch = 0.72
+	target_pitch = -0.72
 	target_yaw = 0.35
 	camera_changed.emit(target_yaw, target_pitch, target_zoom_distance)
 
