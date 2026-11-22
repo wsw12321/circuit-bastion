@@ -44,5 +44,6 @@ func get_zoom_distance() -> float:
 
 func _apply_transform() -> void:
 	var horizontal := cos(pitch) * zoom_distance
-	position = target + Vector3(sin(yaw) * horizontal, sin(pitch) * zoom_distance, cos(yaw) * horizontal)
+	# Negative pitch angles represent an elevated orbit around the target.
+	position = target + Vector3(sin(yaw) * horizontal, -sin(pitch) * zoom_distance, cos(yaw) * horizontal)
 	look_at(target, Vector3.UP)
