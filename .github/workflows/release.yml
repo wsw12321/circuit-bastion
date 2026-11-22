@@ -210,6 +210,8 @@ jobs:
           fi
 
       - name: Run Android contract probe
+        env:
+          CIRCUIT_BASTION_ANDROID_SDK_PROBE: '1'
         run: |
           "$GODOT_BIN" --headless --path . --script scripts/android_probe.gd \
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
