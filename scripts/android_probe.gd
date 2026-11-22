@@ -46,12 +46,21 @@ func _run() -> void:
 	if selected_script == null or selected_script.resource_path != "res://godot/mobile_battle_view.gd":
 		_fail("Android runtime must select MobileBattleView")
 		return
+	var mobile_source_file := FileAccess.open("res://godot/mobile_battle_view.gd", FileAccess.READ)
+	if mobile_source_file == null:
+		_fail("MobileBattleView source could not be opened")
+		return
+	var mobile_source := mobile_source_file.get_as_text()
+	for required in ["InputEventScreenDrag", "_rotate_battle_camera", "_zoom_battle_camera", "pinch_distance"]:
+		if not mobile_source.contains(required):
+			_fail("Android camera gesture contract is missing: " + required)
+			return
 	var view = selected_script.new()
 	if view == null or not view.has_method("_cell_at_mobile"):
 		_fail("touch-capable MobileBattleView could not be instantiated")
 		return
 	view.free()
-	print("ANDROID_SMOKE_OK preset=Android arm64=enabled touch=screen")
+	print("ANDROID_SMOKE_OK preset=Android arm64=enabled touch=screen orbit=drag pinch=zoom")
 	quit(0)
 
 func _fail(message: String) -> void:
