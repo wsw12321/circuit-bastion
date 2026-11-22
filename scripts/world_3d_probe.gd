@@ -24,6 +24,8 @@ func _run() -> void:
 	var camera = instance.get_node_or_null("Camera3D")
 	if not _assert(camera != null and camera.has_method("rotate_orbit"), "orbit camera must be present"):
 		return
+	if not _assert(float(camera.global_position.y) > float(camera.target.y), "orbit camera must remain above the battlefield"):
+		return
 	var yaw_before: float = camera.get_orbit_yaw()
 	camera.rotate_orbit(Vector2(18.0, -8.0))
 	if not _assert(not is_equal_approx(yaw_before, camera.get_orbit_yaw()), "camera rotation should update yaw"):
