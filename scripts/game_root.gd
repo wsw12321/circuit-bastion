@@ -25,6 +25,7 @@ func _ready() -> void:
 	add_child(world)
 	world.setup(simulation)
 	view = select_view_script(OS.has_feature("mobile") or OS.has_feature("android")).new()
+	view.use_3d_battlefield = true
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(view)
 	view.set_simulation(simulation)
