@@ -37,40 +37,54 @@ static func draw_ground_layer(canvas: CanvasItem, center: Vector2, size: float, 
 static func draw_enemy(canvas: CanvasItem, center: Vector2, size: float, kind: String, state: String, phase: float, hit_intensity := 0.0) -> void:
 	var base := palette(kind)
 	var hit := clampf(hit_intensity, 0.0, 1.0)
-	var bob := sin(phase * 2.0 + center.x * 0.01) * size * 0.035
-	var stagger := sin(phase * 18.0) * size * 0.055 * hit
-	var point := center + Vector2(stagger, bob)
-	var fade := 0.42 if state == "dead" else 1.0
+	var dead := state == "dead"
+	var draw_scale := 0.76 if dead else 1.0
+	var animated_size := size * draw_scale
+	var bob := sin(phase * 2.0 + center.x * 0.01) * animated_size * 0.035
+	var stagger := sin(phase * 18.0) * animated_size * 0.055 * hit
+	var lunge := animated_size * 0.10 * sin(phase * 7.0 + center.x * 0.02) if state == "attack" else 0.0
+	var point := center + Vector2(stagger + lunge, bob)
+	var fade := 0.42 if dead else 1.0
 	var body := Color(base, fade)
+	if state == "move":
+		for trail in 2:
+			var trail_x := point.x - animated_size * (0.66 + float(trail) * 0.16)
+			canvas.draw_line(Vector2(trail_x, point.y + animated_size * 0.20), Vector2(trail_x - animated_size * 0.20, point.y + animated_size * 0.20), Color(base, 0.20 - float(trail) * 0.05), 1.2)
 	match kind:
 		"scout":
-			_draw_scout(canvas, point, size, body, phase)
+			_draw_scout(canvas, point, animated_size, body, phase)
 		"bruiser":
-			_draw_bruiser(canvas, point, size, body, phase)
+			_draw_bruiser(canvas, point, animated_size, body, phase)
 		"splitter":
-			_draw_splitter(canvas, point, size, body, phase)
+			_draw_splitter(canvas, point, animated_size, body, phase)
 		"jammer":
-			_draw_jammer(canvas, point, size, body, phase)
+			_draw_jammer(canvas, point, animated_size, body, phase)
 		"leech":
-			_draw_leech(canvas, point, size, body, phase)
+			_draw_leech(canvas, point, animated_size, body, phase)
 		"phase":
-			_draw_phase(canvas, point, size, body, phase)
+			_draw_phase(canvas, point, animated_size, body, phase)
 		"boss":
-			_draw_boss(canvas, point, size, body, phase)
+			_draw_boss(canvas, point, animated_size, body, phase)
 		_:
-			_draw_scout(canvas, point, size, body, phase)
-	if hit > 0.0 and state != "dead":
+			_draw_scout(canvas, point, animated_size, body, phase)
+	if state == "attack":
+		var strike_start := point + Vector2(animated_size * 0.30, 0.0)
+		var strike_end := strike_start + Vector2(animated_size * (0.90 + 0.16 * sin(phase * 9.0)), 0.0)
+		canvas.draw_line(strike_start, strike_end, Color("#ffca62", 0.72), 2.0 if kind != "boss" else 3.5)
+		canvas.draw_circle(strike_end, animated_size * 0.10, Color("#fff1c2", 0.74), true)
+		canvas.draw_arc(point, animated_size * (0.76 if kind != "boss" else 0.98), -0.62, 0.62, 14, Color("#ffca62", 0.76), 1.8 if kind != "boss" else 3.0)
+	if hit > 0.0 and not dead:
 		var flash := hit
-		canvas.draw_circle(point, size * (0.62 + flash * 0.20), Color(1.0, 1.0, 1.0, 0.10 * flash), false, 2.0 + flash * 3.0)
-		canvas.draw_line(point - Vector2(size * 0.42, size * 0.42), point + Vector2(size * 0.42, size * 0.42), Color(1.0, 0.93, 0.72, 0.72 * flash), 2.0)
-		canvas.draw_line(point + Vector2(size * 0.42, -size * 0.42), point - Vector2(size * 0.42, -size * 0.42), Color(1.0, 1.0, 1.0, 0.42 * flash), 1.0)
+		canvas.draw_circle(point, animated_size * (0.62 + flash * 0.20), Color(1.0, 1.0, 1.0, 0.10 * flash), false, 2.0 + flash * 3.0)
+		canvas.draw_line(point - Vector2(animated_size * 0.42, animated_size * 0.42), point + Vector2(animated_size * 0.42, animated_size * 0.42), Color(1.0, 0.93, 0.72, 0.72 * flash), 2.0)
+		canvas.draw_line(point + Vector2(animated_size * 0.42, -animated_size * 0.42), point - Vector2(animated_size * 0.42, -animated_size * 0.42), Color(1.0, 1.0, 1.0, 0.42 * flash), 1.0)
 		for index in 6:
 			var angle := float(index) * TAU / 6.0 + phase * 0.9
-			var inner := point + Vector2(cos(angle), sin(angle)) * size * 0.52
-			var outer := point + Vector2(cos(angle), sin(angle)) * size * (0.72 + flash * 0.20)
+			var inner := point + Vector2(cos(angle), sin(angle)) * animated_size * 0.52
+			var outer := point + Vector2(cos(angle), sin(angle)) * animated_size * (0.72 + flash * 0.20)
 			canvas.draw_line(inner, outer, Color("#fff1c2", 0.78 * flash), 1.5)
 		if kind == "boss":
-			canvas.draw_arc(point, size * (0.90 + flash * 0.16), -phase, -phase + 4.6, 24, Color("#fff1c2", 0.84 * flash), 3.0)
+			canvas.draw_arc(point, animated_size * (0.90 + flash * 0.16), -phase, -phase + 4.6, 24, Color("#fff1c2", 0.84 * flash), 3.0)
 
 static func draw_death_burst(canvas: CanvasItem, center: Vector2, size: float, kind: String, phase: float, intensity := 1.0) -> void:
 	var base := palette(kind)
@@ -92,10 +106,11 @@ static func draw_death_burst(canvas: CanvasItem, center: Vector2, size: float, k
 	canvas.draw_line(center - Vector2(size * 0.18, size * 0.30), center + Vector2(size * 0.18, size * 0.30), Color(1.0, 0.96, 0.80, 0.50 * pulse), 2.0 if not is_boss else 3.0)
 
 static func _draw_scout(canvas: CanvasItem, center: Vector2, size: float, color: Color, phase: float) -> void:
+	var wing_flap := sin(phase * 10.0) * 0.13
 	var body := _points(center, size, [Vector2(0, -0.58), Vector2(0.48, 0), Vector2(0, 0.58), Vector2(-0.48, 0)])
 	canvas.draw_colored_polygon(body, color)
-	canvas.draw_colored_polygon(_points(center + Vector2(-size * 0.34, 0), size * 0.62, [Vector2(-0.62, -0.15), Vector2(-1.0, -0.45), Vector2(-0.95, 0.18), Vector2(-0.48, 0.34)]), Color(color, 0.62))
-	canvas.draw_colored_polygon(_points(center + Vector2(size * 0.34, 0), size * 0.62, [Vector2(0.62, -0.15), Vector2(1.0, -0.45), Vector2(0.95, 0.18), Vector2(0.48, 0.34)]), Color(color, 0.62))
+	canvas.draw_colored_polygon(_points(center + Vector2(-size * 0.34, 0), size * 0.62, [Vector2(-0.62, -0.15 - wing_flap), Vector2(-1.0, -0.45 + wing_flap), Vector2(-0.95, 0.18 + wing_flap), Vector2(-0.48, 0.34 - wing_flap)]), Color(color, 0.62))
+	canvas.draw_colored_polygon(_points(center + Vector2(size * 0.34, 0), size * 0.62, [Vector2(0.62, -0.15 + wing_flap), Vector2(1.0, -0.45 - wing_flap), Vector2(0.95, 0.18 - wing_flap), Vector2(0.48, 0.34 + wing_flap)]), Color(color, 0.62))
 	canvas.draw_circle(center, size * 0.12, Color("#071017"))
 	canvas.draw_circle(center + Vector2(size * 0.03, -size * 0.02), size * 0.055, Color("#e9fbff"))
 	canvas.draw_line(center + Vector2(-size * 0.18, -size * 0.44), center + Vector2(-size * 0.38, -size * 0.72), color, 1.5)
