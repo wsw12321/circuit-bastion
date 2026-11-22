@@ -282,7 +282,10 @@ func _check_breaches() -> void:
 		return
 	for id in enemy_bodies.keys():
 		var actor = enemy_bodies[id]
-		if not is_instance_valid(actor) or actor.get_path_progress() < 0.995 or _breach_seen.has(id):
+		var at_core := actor.get_path_progress() >= 0.995
+		if core_hit_area != null:
+			at_core = at_core and actor.global_position.distance_to(core_hit_area.global_position) <= CELL_SIZE * 0.9
+		if not is_instance_valid(actor) or not at_core or _breach_seen.has(id):
 			continue
 		_breach_seen[id] = true
 		var state: Dictionary = _state_map(simulation.get_snapshot().get("enemies", {})).get(id, {})
