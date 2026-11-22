@@ -322,19 +322,27 @@ func _draw_routes(origin: Vector2, cell_size: float) -> void:
 		_cell_center(origin, cell_size, Vector2i(6, 3)),
 		_cell_center(origin, cell_size, Vector2i(6, 5)),
 	])
-	_draw_polyline(signal_points, Color("#42c7ee"), 6.0 if route_focus in ["SIGNAL", "CONNECTION", "ACTION"] else 4.0)
-	_draw_polyline(energy_points, Color("#ffca62"), 5.0 if route_focus in ["POWER", "ENERGY"] else 3.0)
-	_draw_polyline(hazard_points, Color("#ff6b75"), 5.0 if route_focus in ["BREACH", "DAMAGE"] else 2.0)
+	var signal_color := _effect_color("signal", Color("#42c7ee"))
+	var energy_color := _effect_color("energy", Color("#ffca62"))
+	var hazard_color := _effect_color("hazard", Color("#ff6b75"))
+	_draw_polyline(signal_points, signal_color, 6.0 if route_focus in ["SIGNAL", "CONNECTION", "ACTION"] else 4.0)
+	_draw_polyline(energy_points, energy_color, 5.0 if route_focus in ["POWER", "ENERGY"] else 3.0)
+	_draw_polyline(hazard_points, hazard_color, 5.0 if route_focus in ["BREACH", "DAMAGE"] else 2.0)
 	if highlighted_event == 0 or highlighted_event == 1:
 		_draw_polyline(signal_points, Color("#d9fbff"), 6.0)
 	for point in signal_points:
-		draw_circle(point, 3.0 + sin(phase + point.x * 0.02) * 1.0, Color("#a7f0ff"))
+		draw_circle(point, 3.0 + sin(phase + point.x * 0.02) * 1.0, Color(signal_color, 0.78))
 	var packet_t := fmod(phase * 0.18, 1.0)
-	for trail in range(3):
+	var trail_count := 3
+	if effect_quality == 1:
+		trail_count = 2
+	elif effect_quality == 0:
+		trail_count = 1
+	for trail in range(trail_count):
 		var trail_progress := fmod(packet_t - float(trail) * 0.035 + 1.0, 1.0)
 		_draw_packet(signal_points, trail_progress, Color(route_flash_color, 0.35 - float(trail) * 0.09), maxf(1.5, 3.5 - float(trail) * 0.6))
 	_draw_packet(signal_points, packet_t, route_flash_color, 5.0 + route_flash * 5.0)
-	_draw_packet(energy_points, fmod(packet_t + 0.35, 1.0), Color("#ffca62"), 3.0)
+	_draw_packet(energy_points, fmod(packet_t + 0.35, 1.0), energy_color, 3.0 if effect_quality > 0 else 2.0)
 	if route_flash > 0.0:
 		draw_circle(_cell_center(origin, cell_size, Vector2i(5, 3)), cell_size * (0.36 + route_flash * 0.12), Color(route_flash_color, route_flash * 0.10), false, 2.0)
 
