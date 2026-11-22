@@ -31,6 +31,8 @@ var enemy_bodies: Dictionary = {}
 var module_areas: Dictionary = {}
 var _hit_cooldowns: Dictionary = {}
 var _breach_seen: Dictionary = {}
+var _collision_queries: Dictionary = {}
+var _collision_shapes: Dictionary = {}
 var _ready_nodes := false
 var _visual_phase := 0.0
 var _signal_route_points: Array[Vector3] = []
@@ -386,13 +388,24 @@ func world_to_cell(world_position: Vector3) -> Vector2i:
 
 func snap_to_grid(world_position: Vector3) -> Dictionary:
 	var grid_position := world_to_cell(world_position)
+	var in_bounds := grid_position.x >= 0 and grid_position.x < GRID_COLUMNS and grid_position.y >= 0 and grid_position.y < GRID_ROWS
 	var clamped := Vector2i(clampi(grid_position.x, 0, GRID_COLUMNS - 1), clampi(grid_position.y, 0, GRID_ROWS - 1))
-	return {"grid": clamped, "world_position": cell_to_world(clamped), "distance": world_position.distance_to(cell_to_world(clamped))}
+	return {"grid": clamped, "in_bounds": in_bounds, "world_position": cell_to_world(clamped), "distance": world_position.distance_to(cell_to_world(clamped))}
 
 func preview_deployment(module_kind: String, world_position: Vector3, rotation := 0) -> Dictionary:
 	if simulation == null:
 		return {"valid": false, "reason": "simulation_unavailable"}
 	var snap := snap_to_grid(world_position)
+	if not bool(snap.get("in_bounds", false)):
+		return {
+			"valid": false,
+			"kind": module_kind,
+			"grid": {"x": int(snap.grid.x), "y": int(snap.grid.y)},
+			"rotation": posmod(rotation, 4),
+			"world_position": snap.world_position,
+			"snap_distance": snap.distance,
+			"reason": "超出棋盘",
+		}
 	var preview: Dictionary = simulation.preview_placement(module_kind, snap.grid, rotation)
 	preview["world_position"] = snap.world_position
 	preview["snap_distance"] = snap.distance
@@ -409,6 +422,7 @@ func deploy_module(module_kind: String, world_position: Vector3, rotation := 0) 
 		return ""
 	var module_id := str(simulation.build_module(module_kind, grid_position, rotation))
 	if module_id.is_empty():
+		deployment_rejected.emit(module_kind, grid_position, str(simulation.last_failure_reason))
 		return ""
 	sync_snapshot(simulation.get_snapshot())
 	deployment_snapped.emit(module_id, grid_position, preview.world_position)
@@ -453,7 +467,11 @@ func sync_snapshot(snapshot: Dictionary) -> void:
 		if not enemies_state.has(id):
 			var stale_enemy: Node = enemy_bodies[id]
 			enemy_bodies.erase(id)
+			_collision_queries.erase(id)
+			_collision_shapes.erase(id)
+			_breach_seen.erase(id)
 			stale_enemy.queue_free()
+	_prune_contact_state(modules_state, enemies_state)
 	for id in modules_state.keys():
 		var area = module_areas.get(id)
 		if area == null or not is_instance_valid(area):
@@ -470,6 +488,7 @@ func sync_snapshot(snapshot: Dictionary) -> void:
 			enemy_container.add_child(actor)
 			enemy_bodies[id] = actor
 		actor.configure(enemies_state[id], route_curve)
+		_ensure_collision_query(id, actor)
 
 func step_world(delta: float) -> void:
 	if not _ready_nodes:
@@ -507,14 +526,12 @@ func _query_collisions() -> void:
 			if is_instance_valid(area) and not area.is_destroyed() and actor.global_position.distance_to(area.global_position) <= area.contact_radius + actor.hit_radius:
 				touched["%s:%s" % [enemy_id, module_id]] = enemy_id
 		if is_inside_tree() and get_world_3d() != null:
-			var query_shape := SphereShape3D.new()
-			query_shape.radius = actor.hit_radius
-			var query := PhysicsShapeQueryParameters3D.new()
-			query.shape = query_shape
+			var query := _ensure_collision_query(enemy_id, actor)
 			query.transform = Transform3D(Basis.IDENTITY, actor.global_position)
 			query.collision_mask = MODULE_COLLISION_LAYER
 			query.collide_with_areas = true
-			for hit in get_world_3d().direct_space_state.intersect_shape(query, 16):
+			var max_results := maxi(16, module_areas.size() * 2)
+			for hit in get_world_3d().direct_space_state.intersect_shape(query, max_results):
 				var collider: Object = hit.get("collider")
 				if collider != null and collider.has_method("get_module_id"):
 					touched["%s:%s" % [enemy_id, collider.get_module_id()]] = enemy_id
@@ -538,6 +555,29 @@ func _register_hit(enemy_id: String, module_id: String) -> void:
 		actor.flash_hit()
 	_hit_cooldowns[key] = 0.35
 	enemy_hit.emit(enemy_id, module_id, damage)
+
+func _ensure_collision_query(enemy_id: String, actor: Node) -> PhysicsShapeQueryParameters3D:
+	var shape = _collision_shapes.get(enemy_id)
+	var radius := maxf(0.01, float(actor.get("hit_radius")))
+	if shape == null or not is_equal_approx(float(shape.radius), radius):
+		shape = SphereShape3D.new()
+		shape.radius = radius
+		_collision_shapes[enemy_id] = shape
+	var query: PhysicsShapeQueryParameters3D = _collision_queries.get(enemy_id)
+	if query == null:
+		query = PhysicsShapeQueryParameters3D.new()
+		_collision_queries[enemy_id] = query
+	query.shape = shape
+	return query
+
+func _prune_contact_state(modules_state: Dictionary, enemies_state: Dictionary) -> void:
+	for enemy_id in _breach_seen.keys().duplicate():
+		if not enemies_state.has(enemy_id):
+			_breach_seen.erase(enemy_id)
+	for key in _hit_cooldowns.keys().duplicate():
+		var ids := str(key).split(":")
+		if ids.size() != 2 or not enemies_state.has(ids[0]) or not modules_state.has(ids[1]):
+			_hit_cooldowns.erase(key)
 
 func _update_hit_cooldowns(delta: float) -> void:
 	for key in _hit_cooldowns.keys().duplicate():

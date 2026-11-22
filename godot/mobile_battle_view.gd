@@ -150,8 +150,12 @@ func _gui_input(event: InputEvent) -> void:
 				_mobile_pointer_press(event.position)
 			else:
 				_mobile_pointer_release(event.position)
-		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			_cancel_interaction("已取消部署")
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			# Keep the desktop and touch-first views in sync: the orbit camera
+			# needs the release event to clear its right-button drag latch.
+			if event.pressed:
+				_cancel_interaction("已取消部署")
+			_forward_camera_input(event)
 		elif event.button_index == MOUSE_BUTTON_MIDDLE or event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_forward_camera_input(event)
 	elif event is InputEventMouseMotion:

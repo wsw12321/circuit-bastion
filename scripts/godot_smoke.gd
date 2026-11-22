@@ -26,6 +26,7 @@ func _run() -> void:
 	var overlay_loaded := false
 	var battle_world_loaded := false
 	var camera_contract_loaded := false
+	var runtime_camera: Node = null
 	for child: Node in instance.get_children():
 		if child.get_script() != null and child.get_script().resource_path == "res://godot/battle_view.gd":
 			battle_view_loaded = true
@@ -36,6 +37,7 @@ func _run() -> void:
 		if child.get_script() != null and child.get_script().resource_path == "res://gameplay/world/battle_world_3d.gd":
 			battle_world_loaded = true
 			var camera := child.get_node_or_null("BattleCamera3D")
+			runtime_camera = camera if camera != null else child.get_node_or_null("Camera3D")
 			if camera != null and camera.has_method("rotate_orbit") and camera.has_method("zoom_by") and camera.has_method("get_orbit_yaw") and camera.has_method("get_zoom_distance"):
 				camera_contract_loaded = true
 	if not battle_view_loaded:
@@ -54,8 +56,39 @@ func _run() -> void:
 		_fail("BattleView camera input wiring is missing")
 		return
 	var battle_view_source_file := FileAccess.open("res://godot/battle_view.gd", FileAccess.READ)
-	if battle_view_source_file == null or not battle_view_source_file.get_as_text().contains("MOUSE_BUTTON_MASK_LEFT"):
+	if battle_view_source_file == null:
+		_fail("BattleView source could not be opened")
+		return
+	var battle_view_source := battle_view_source_file.get_as_text()
+	if not battle_view_source.contains("MOUSE_BUTTON_MASK_LEFT"):
 		_fail("desktop left-drag camera contract is missing")
+		return
+	if not battle_view_source.contains("if event.button_index == MOUSE_BUTTON_RIGHT:"):
+		_fail("desktop right-button release camera contract is missing")
+		return
+	if runtime_camera == null or battle_view_node == null:
+		_fail("desktop camera input test could not find runtime nodes")
+		return
+	var right_press := InputEventMouseButton.new()
+	right_press.button_index = MOUSE_BUTTON_RIGHT
+	right_press.pressed = true
+	battle_view_node.call("_gui_input", right_press)
+	var orbit_before: float = runtime_camera.get_orbit_yaw()
+	var orbit_motion := InputEventMouseMotion.new()
+	orbit_motion.relative = Vector2(18.0, 0.0)
+	orbit_motion.button_mask = MOUSE_BUTTON_MASK_RIGHT
+	battle_view_node.call("_gui_input", orbit_motion)
+	if is_equal_approx(orbit_before, float(runtime_camera.get_orbit_yaw())):
+		_fail("desktop right-button orbit motion was not forwarded")
+		return
+	var right_release := InputEventMouseButton.new()
+	right_release.button_index = MOUSE_BUTTON_RIGHT
+	right_release.pressed = false
+	battle_view_node.call("_gui_input", right_release)
+	var orbit_after_release: float = runtime_camera.get_orbit_yaw()
+	battle_view_node.call("_gui_input", orbit_motion)
+	if not is_equal_approx(orbit_after_release, float(runtime_camera.get_orbit_yaw())):
+		_fail("desktop right-button release did not stop orbit motion")
 		return
 	var child_count := instance.get_child_count()
 	instance.free()
