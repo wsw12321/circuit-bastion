@@ -23,19 +23,32 @@ func _run() -> void:
 		return
 	var battle_view_loaded := false
 	var overlay_loaded := false
+	var battle_world_loaded := false
+	var camera_contract_loaded := false
 	for child: Node in instance.get_children():
 		if child.get_script() != null and child.get_script().resource_path == "res://godot/battle_view.gd":
 			battle_view_loaded = true
 			for nested: Node in child.get_children():
 				if nested.get_script() != null and nested.get_script().resource_path == "res://godot/battle_ui_overlay.gd":
 					overlay_loaded = true
+		if child.get_script() != null and child.get_script().resource_path == "res://gameplay/world/battle_world_3d.gd":
+			battle_world_loaded = true
+			var camera := child.get_node_or_null("BattleCamera3D")
+			if camera != null and camera.has_method("rotate_orbit") and camera.has_method("zoom_by") and camera.has_method("get_orbit_yaw") and camera.has_method("get_zoom_distance"):
+				camera_contract_loaded = true
 	if not battle_view_loaded:
 		_fail("BattleView script could not be instantiated")
 		return
 	if not overlay_loaded:
 		_fail("BattleUIOverlay script could not be instantiated")
 		return
-	print("GODOT_SMOKE_OK children=%d root_script=%s battle_view=true overlay=true" % [instance.get_child_count(), instance.get_script().resource_path])
+	if not battle_world_loaded:
+		_fail("3D runtime world script could not be instantiated")
+		return
+	if not camera_contract_loaded:
+		_fail("3D runtime camera orbit/zoom contract is missing")
+		return
+	print("GODOT_SMOKE_OK children=%d root_script=%s battle_view=true overlay=true world_3d=true camera_orbit_zoom=true" % [instance.get_child_count(), instance.get_script().resource_path])
 	quit(0)
 
 func _fail(message: String) -> void:
