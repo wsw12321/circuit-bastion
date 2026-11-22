@@ -56,8 +56,8 @@ func _run() -> void:
 		return
 	if not _assert(hit_count >= 0, "3D hit signal contract should remain callable"):
 		return
-	var actor_count := world.get_enemy_actor_count()
-	var module_count := world.module_areas.size()
+	var actor_count: int = world.get_enemy_actor_count()
+	var module_count: int = world.module_areas.size()
 	world.free()
 	print("WORLD_PHYSICS_3D_OK actors=%d hits=%d modules=%d" % [actor_count, hit_count, module_count])
 	quit(0)
