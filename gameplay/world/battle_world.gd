@@ -141,7 +141,7 @@ func move_module_to_cell(module_id: String, grid_position: Vector2i) -> bool:
 	if not bool(preview.get("valid", false)):
 		deployment_rejected.emit(str(simulation.modules.get(module_id, {}).get("kind", "")), grid_position, str(preview.get("reason", "invalid")))
 		return false
-	var moved := simulation.move_module(module_id, grid_position)
+	var moved: bool = bool(simulation.move_module(module_id, grid_position))
 	if moved:
 		sync_snapshot(simulation.get_snapshot())
 		deployment_snapped.emit(module_id, grid_position, cell_to_world(grid_position))
