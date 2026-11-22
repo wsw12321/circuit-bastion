@@ -24,6 +24,12 @@ func _run() -> void:
 	var camera = instance.get_node_or_null("Camera3D")
 	if not _assert(camera != null and camera.has_method("rotate_orbit"), "orbit camera must be present"):
 		return
+	var camera_count: int = 0
+	for child in instance.get_children():
+		if child is Camera3D:
+			camera_count += 1
+	if not _assert(camera_count == 1, "3D scene must keep one authored orbit camera"):
+		return
 	if not _assert(float(camera.global_position.y) > float(camera.target.y), "orbit camera must remain above the battlefield"):
 		return
 	var yaw_before: float = camera.get_orbit_yaw()
