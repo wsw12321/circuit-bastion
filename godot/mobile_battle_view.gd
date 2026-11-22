@@ -29,6 +29,8 @@ func _draw_mobile(size: Vector2) -> void:
 	var board: Rect2 = metrics["board"]
 	var origin: Vector2 = metrics["origin"]
 	var cell_size: float = metrics["cell_size"]
+	# Keep silhouettes, labels, and health bars legible across narrow phones.
+	character_scale = clampf(cell_size / 56.0, 0.62, 1.0)
 	draw_rect(board, Color("#091923"), true)
 	draw_rect(board, Color("#1c3c4b"), false, 1.0)
 	draw_rect(Rect2(board.position + Vector2(7, 7), board.size - Vector2(14, 14)), Color("#112b36"), false, 1.0)
