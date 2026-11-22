@@ -314,7 +314,7 @@ func _sync_controls() -> void:
 
 func _shop_items() -> Array:
 	if battle_view != null and battle_view.has_method("_display_shop_items"):
-		var result = battle_view.call("_display_shop_items")
+		var result: Variant = battle_view.call("_display_shop_items")
 		if result is Array:
 			return result
 	return []
