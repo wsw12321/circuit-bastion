@@ -853,7 +853,7 @@ func _gui_input(event: InputEvent) -> void:
 		if camera_dragging:
 			_rotate_battle_camera(event.relative)
 			return
-		var left_dragging := (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0
+		var left_dragging: bool = (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0
 		if left_dragging and not build_mode and dragging_module_id.is_empty() and _cell_at(event.position).x >= 0:
 			camera_dragging = true
 			_rotate_battle_camera(event.relative)
