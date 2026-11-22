@@ -142,6 +142,14 @@ func set_snapshot(value: Dictionary) -> void:
 		shop_inventory = snapshot.shop.duplicate(true)
 	if snapshot.has("bench") and snapshot.bench is Array:
 		bench_items = snapshot.bench.duplicate(true)
+	_consume_new_events()
+	var finished_now := bool(snapshot.get("finished", false))
+	var victory_now := bool(snapshot.get("victory", false))
+	if finished_now and not previous_finished:
+		result_transition_time = 0.0
+		_start_result_transition("victory" if victory_now else "defeat")
+	previous_finished = finished_now
+	previous_victory = victory_now
 	queue_redraw()
 
 func highlight_event(event: Dictionary) -> void:
