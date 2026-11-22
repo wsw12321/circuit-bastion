@@ -56,7 +56,18 @@ jobs:
             "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" \
             --output "$godot_root/templates.tpz"
           unzip -q "$godot_root/templates.tpz" -d "$godot_root/templates"
-          cp -R "$godot_root/templates/templates/${GODOT_VERSION}.stable" "$template_root/"
+          template_source="$(find "$godot_root/templates" -type d -name '*.stable' -print -quit)"
+          if [[ -z "$template_source" || ! -d "$template_source" ]]; then
+            echo "Godot export template directory was not found after extraction" >&2
+            find "$godot_root/templates" -maxdepth 4 -print >&2
+            exit 1
+          fi
+          template_version="$(basename "$template_source")"
+          template_destination="$template_root/$template_version"
+          mkdir -p "$template_destination"
+          cp -R "$template_source/." "$template_destination/"
+          test -f "$template_destination/linux_release.x86_64"
+          test -f "$template_destination/windows_release.x86_64.exe"
           echo "GODOT_BIN=$godot_root/godot" >> "$GITHUB_ENV"
 
       - name: Run Godot headless smoke checks
