@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "triggers":["enemy_in_range","target_seen","signal_received","wave_started","energy_low","heat_high"],
+  "conditions":["always","tag:light","tag:armored","tag:swarm","tag:signal","tag:drain","tag:phase"],
+  "actions":["fire","slow","route","filter","cool","repair"]
+}

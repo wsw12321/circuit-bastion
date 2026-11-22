@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "waves": [
+    {"wave":1,"count":4,"pool":["scout","splitter","jammer"],"feature":"信号拥塞"},
+    {"wave":2,"count":5,"pool":["scout","bruiser","splitter"],"feature":"装甲先导"},
+    {"wave":3,"count":6,"pool":["splitter","jammer","leech"],"feature":"线路干扰"},
+    {"wave":4,"count":7,"pool":["scout","bruiser","phase"],"feature":"相位窗口"},
+    {"wave":5,"count":8,"pool":["bruiser","jammer","leech"],"feature":"能源抽取"},
+    {"wave":6,"count":9,"pool":["scout","splitter","phase"],"feature":"多入口"},
+    {"wave":7,"count":10,"pool":["bruiser","jammer","leech","phase"],"feature":"热交换"},
+    {"wave":8,"count":11,"pool":["splitter","jammer","bruiser"],"feature":"复制信号"},
+    {"wave":9,"count":12,"pool":["bruiser","leech","phase"],"feature":"核心暴露"},
+    {"wave":10,"count":13,"pool":["bruiser","jammer","phase"],"feature":"首领熔断主宰","boss":"boss"}
+  ]
+}

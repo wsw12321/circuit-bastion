@@ -87,6 +87,10 @@ jobs:
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/simulation_probe.gd \
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/qa_smoke.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 
       - name: Export Linux x64 Godot build
         run: bash scripts/package-godot-release.sh "Linux/X11" "circuit-bastion-godot-linux-x64" "$GITHUB_REF_NAME"

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "enemies": [
+    {"kind":"scout","label":"侦察蜂","hp":34,"speed":0.12,"damage":1,"tags":["light"]},
+    {"kind":"bruiser","label":"破城兽","hp":90,"speed":0.045,"damage":3,"tags":["armored"]},
+    {"kind":"splitter","label":"裂变体","hp":52,"speed":0.07,"damage":2,"tags":["swarm"]},
+    {"kind":"jammer","label":"干扰体","hp":64,"speed":0.06,"damage":2,"tags":["signal"]},
+    {"kind":"leech","label":"虹吸虫","hp":42,"speed":0.09,"damage":2,"tags":["drain"]},
+    {"kind":"phase","label":"相位影","hp":74,"speed":0.08,"damage":2,"tags":["phase"]},
+    {"kind":"boss","label":"熔断主宰","hp":520,"speed":0.025,"damage":12,"tags":["boss","armored"]}
+  ]
+}

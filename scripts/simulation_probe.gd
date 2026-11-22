@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Simulation = preload("res://scripts/simulation.gd")
+const Replay = preload("res://scripts/replay.gd")
 
 func _initialize() -> void:
 	var first = _build_run(2026)
@@ -8,6 +9,12 @@ func _initialize() -> void:
 	_assert(first.replay_signature() == second.replay_signature(), "same seed must produce same replay")
 	_assert(first.current_wave >= 1, "battle should start a wave")
 	_assert(first.get_event_log().size() > 0, "event trace must contain records")
+	var replay = Replay.decode(first.export_replay())
+	_assert(replay != null, "replay JSON should round-trip")
+	_assert(replay.commands.size() >= 4, "replay should retain setup commands")
+	var restored = Simulation.new(0)
+	_assert(restored.load_state(first.save_state()), "save state should restore")
+	_assert(restored.replay_signature() == first.replay_signature(), "restored state should preserve replay signature")
 	print("SIMULATION_OK signature=%s events=%d wave=%d integrity=%d" % [first.replay_signature(), first.get_event_log().size(), first.current_wave, first.base_integrity])
 	quit(0)
 

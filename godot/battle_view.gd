@@ -27,6 +27,9 @@ var speed := 1
 var paused := false
 var phase := 0.0
 var hover_cell := Vector2i(-1, -1)
+var last_tick := -1
+var route_flash := 0.0
+var route_flash_color := Color("#72d7ff")
 
 var modules: Array = [
 	{"id": "scanner", "name": "探针", "cell": Vector2i(1, 1), "color": Color("#5ed6ff"), "load": 0.22},
@@ -51,6 +54,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	phase = fmod(phase + delta * (0.8 if not paused else 0.16), TAU)
+	route_flash = maxf(0.0, route_flash - delta * 1.7)
 	if simulation != null and simulation.has_method("get_snapshot"):
 		set_snapshot(simulation.get_snapshot())
 	queue_redraw()
@@ -63,6 +67,11 @@ func set_simulation(value: Object) -> void:
 
 func set_snapshot(value: Dictionary) -> void:
 	snapshot = value.duplicate(true)
+	var tick := int(snapshot.get("tick", 0))
+	if last_tick >= 0 and tick != last_tick:
+		route_flash = 1.0
+		route_flash_color = Color("#ffca62") if tick % 3 == 0 else Color("#72d7ff")
+	last_tick = tick
 	if snapshot.has("paused"):
 		paused = bool(snapshot.paused)
 	if snapshot.has("speed"):
@@ -100,6 +109,10 @@ func _draw_top_bar(size: Vector2) -> void:
 	draw_string(font, Vector2(size.x - 310, 54), "WAVE %02d / 10" % int(snapshot.get("wave", 3)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9fb8c1"))
 	draw_string(font, Vector2(size.x - 130, 35), "电荷  %03d" % int(snapshot.get("charge", 128)), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#ffca62"))
 	draw_string(font, Vector2(size.x - 130, 54), "核心  %02d%%" % int(snapshot.get("integrity", 86)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#68e3bf"))
+	var wave_progress := clampf(float(snapshot.get("wave", 1)) / 10.0, 0.0, 1.0)
+	draw_rect(Rect2(MARGIN, TOP_BAR_HEIGHT - 5, 240, 2), Color("#15303b"), true)
+	draw_rect(Rect2(MARGIN, TOP_BAR_HEIGHT - 5, 240 * wave_progress, 2), Color("#42c7ee"), true)
+	draw_string(font, Vector2(MARGIN + 255, TOP_BAR_HEIGHT - 1), "LIVE TELEMETRY", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#47717d"))
 
 
 func _draw_battlefield(size: Vector2) -> void:
@@ -107,6 +120,7 @@ func _draw_battlefield(size: Vector2) -> void:
 	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - BOTTOM_BAR_HEIGHT - 40.0)
 	draw_rect(board, Color("#091923"), true)
 	draw_rect(board, Color("#1c3c4b"), false, 1.0)
+	draw_rect(Rect2(board.position + Vector2(8, 8), board.size - Vector2(16, 16)), Color("#112b36"), false, 1.0)
 	var cell_size: float = minf((board.size.x - 40.0) / float(GRID_COLUMNS), (board.size.y - 72.0) / float(GRID_ROWS))
 	var grid_size := Vector2(cell_size * GRID_COLUMNS, cell_size * GRID_ROWS)
 	var origin := board.position + Vector2((board.size.x - grid_size.x) * 0.5, 44.0)
@@ -119,6 +133,7 @@ func _draw_battlefield(size: Vector2) -> void:
 			var fill := Color("#0d222c") if cell != hover_cell else Color("#173745")
 			draw_rect(rect, fill, true)
 			draw_rect(rect, Color("#1b3b48"), false, 1.0)
+	_draw_board_markers(origin, cell_size)
 	_draw_modules(origin, cell_size)
 	_draw_enemies(origin, cell_size)
 	_draw_path_legend(board)
@@ -128,6 +143,20 @@ func _draw_board_header(board: Rect2) -> void:
 	var font := ThemeDB.fallback_font
 	draw_string(font, board.position + Vector2(18, 26), "SECTOR 07 / FOUNDRY RING", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7e8ed"))
 	draw_string(font, board.position + Vector2(board.size.x - 184, 26), "SIM TICK  %06d" % int(snapshot.get("tick", 1842)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#6f929f"))
+	draw_string(font, board.position + Vector2(18, board.size.y - 42), "ROUTE INTEGRITY  /  96%", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#4d8290"))
+	draw_string(font, board.position + Vector2(board.size.x - 134, board.size.y - 42), "BANDWIDTH 64%", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#4d8290"))
+
+
+func _draw_board_markers(origin: Vector2, cell_size: float) -> void:
+	var font := ThemeDB.fallback_font
+	var spawn := _cell_center(origin, cell_size, Vector2i(0, 3))
+	var core := _cell_center(origin, cell_size, Vector2i(7, 3))
+	draw_circle(spawn, cell_size * 0.22, Color("#ff6b75", 0.08))
+	draw_arc(spawn, cell_size * 0.27, phase, phase + 4.6, 24, Color("#ff6b75", 0.8), 2.0)
+	draw_circle(core, cell_size * 0.25, Color("#68e3bf", 0.08))
+	draw_arc(core, cell_size * 0.30, -phase, -phase + 4.6, 24, Color("#68e3bf", 0.8), 2.0)
+	draw_string(font, spawn + Vector2(-20, cell_size * 0.46), "ENTRY", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("#9a5f6b"))
+	draw_string(font, core + Vector2(-18, cell_size * 0.48), "CORE", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("#5a9d8b"))
 
 
 func _draw_routes(origin: Vector2, cell_size: float) -> void:
@@ -154,12 +183,29 @@ func _draw_routes(origin: Vector2, cell_size: float) -> void:
 		_draw_polyline(signal_points, Color("#d9fbff"), 6.0)
 	for point in signal_points:
 		draw_circle(point, 3.0 + sin(phase + point.x * 0.02) * 1.0, Color("#a7f0ff"))
+	var packet_t := fmod(phase * 0.18, 1.0)
+	_draw_packet(signal_points, packet_t, route_flash_color, 5.0 + route_flash * 5.0)
+	_draw_packet(energy_points, fmod(packet_t + 0.35, 1.0), Color("#ffca62"), 3.0)
+	if route_flash > 0.0:
+		draw_circle(_cell_center(origin, cell_size, Vector2i(5, 3)), cell_size * (0.36 + route_flash * 0.12), Color(route_flash_color, route_flash * 0.10), false, 2.0)
 
 
 func _draw_polyline(points: PackedVector2Array, color: Color, width: float) -> void:
 	for index in range(points.size() - 1):
 		draw_line(points[index], points[index + 1], color.darkened(0.42), width + 5.0)
 		draw_line(points[index], points[index + 1], color, width)
+
+
+func _draw_packet(points: PackedVector2Array, progress: float, color: Color, radius: float) -> void:
+	if points.size() < 2:
+		return
+	var segment_count := points.size() - 1
+	var scaled := progress * float(segment_count)
+	var segment := clampi(int(floor(scaled)), 0, segment_count - 1)
+	var local_t := scaled - float(segment)
+	var position := points[segment].lerp(points[segment + 1], local_t)
+	draw_circle(position, radius + 5.0, Color(color, 0.08), true)
+	draw_circle(position, radius, color, true)
 
 
 func _draw_modules(origin: Vector2, cell_size: float) -> void:
@@ -174,10 +220,16 @@ func _draw_modules(origin: Vector2, cell_size: float) -> void:
 		if selected:
 			draw_circle(center, radius + 7.0, Color(color, 0.10))
 			draw_arc(center, radius + 7.0, phase, phase + 4.3, 24, Color(color, 0.7), 2.0)
+			draw_arc(center, radius + 12.0, -phase * 0.6, -phase * 0.6 + 3.7, 18, Color(color, 0.25), 1.0)
 		draw_circle(center, radius, Color("#102834"))
 		draw_circle(center, radius, color, false, 3.0)
 		draw_line(center - Vector2(radius * 0.58, 0), center + Vector2(radius * 0.58, 0), color, 2.0)
 		draw_line(center - Vector2(0, radius * 0.58), center + Vector2(0, radius * 0.58), color, 2.0)
+		for socket_index in range(4):
+			var socket_angle := float(socket_index) * TAU / 4.0 + PI / 4.0
+			var socket := center + Vector2(cos(socket_angle), sin(socket_angle)) * (radius + 2.0)
+			draw_circle(socket, 3.0, Color("#071017"), true)
+			draw_circle(socket, 2.0, color, true)
 		draw_string(font, center + Vector2(-radius, radius + 18), str(module.get("name", "模块")), HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, 11, Color("#c5dbe2"))
 		var load: float = float(module.get("load", 0.2))
 		var bar := Rect2(center + Vector2(-radius, radius + 25), Vector2(radius * 2.0, 4))
@@ -256,6 +308,11 @@ func _draw_right_panel(size: Vector2) -> void:
 	draw_string(font, panel.position + Vector2(18, 284), "规则槽  2 / 3", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#8eb0bb"))
 	_draw_rule(panel.position + Vector2(18, 300), "目标类型 == 裂隙虫", "脉冲伤害 +24", Color("#b690ff"))
 	_draw_rule(panel.position + Vector2(18, 343), "若线路拥塞 > 60%", "切换为低功率", Color("#ffca62"))
+	draw_string(font, panel.position + Vector2(18, 405), "实时遥测", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#8eb0bb"))
+	_draw_meter(panel.position + Vector2(18, 421), "核心完整度", float(snapshot.get("integrity", 86)) / 100.0, Color("#68e3bf"), "%02d%%" % int(snapshot.get("integrity", 86)))
+	_draw_meter(panel.position + Vector2(18, 448), "电荷储备", float(snapshot.get("charge", 128)) / 200.0, Color("#ffca62"), "%03d" % int(snapshot.get("charge", 128)))
+	_draw_meter(panel.position + Vector2(18, 475), "线路带宽", 0.64, Color("#72d7ff"), "64%")
+	_draw_meter(panel.position + Vector2(18, 502), "热交换", 0.31, Color("#ff6b75"), "31°")
 	_draw_event_log(panel)
 
 
@@ -273,6 +330,16 @@ func _draw_rule(position: Vector2, condition: String, action: String, color: Col
 	draw_rect(rect, Color("#264653"), false, 1.0)
 	draw_string(font, position + Vector2(10, 14), condition, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#d2e2e6"))
 	draw_string(font, position + Vector2(10, 27), "→ " + action, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, color)
+
+
+func _draw_meter(position: Vector2, label: String, value: float, color: Color, value_text: String) -> void:
+	var font := ThemeDB.fallback_font
+	var clamped := clampf(value, 0.0, 1.0)
+	draw_string(font, position, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#a9c1c8"))
+	draw_string(font, position + Vector2(RIGHT_PANEL_WIDTH - 72, 0), value_text, HORIZONTAL_ALIGNMENT_RIGHT, 54, 9, color)
+	var track := Rect2(position + Vector2(0, 7), Vector2(RIGHT_PANEL_WIDTH - 36, 4))
+	draw_rect(track, Color("#17313b"), true)
+	draw_rect(Rect2(track.position, Vector2(track.size.x * clamped, track.size.y)), color, true)
 
 
 func _draw_event_log(panel: Rect2) -> void:
@@ -300,7 +367,27 @@ func _draw_bottom_bar(size: Vector2) -> void:
 	_draw_button(Rect2(MARGIN, y + 20, 118, 38), "暂停" if not paused else "继续", "pause", Color("#ffca62"))
 	_draw_button(Rect2(MARGIN + 128, y + 20, 80, 38), "%d×" % speed, "speed", Color("#72d7ff"))
 	_draw_button(Rect2(MARGIN + 218, y + 20, 118, 38), "事件回放", "replay", Color("#b690ff"))
+	_draw_shop_slots(y)
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 290, y + 43), "确定性种子  CB-07-1842", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#6b8d98"))
+
+
+func _draw_shop_slots(y: float) -> void:
+	var font := ThemeDB.fallback_font
+	draw_string(font, Vector2(390, y + 19), "备战商店", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#60818c"))
+	var shop := [
+		{"name": "滤波器", "type": "逻辑", "cost": "18 C", "color": Color("#b690ff")},
+		{"name": "缓存", "type": "中继", "cost": "24 C", "color": Color("#72d7ff")},
+		{"name": "维修臂", "type": "执行", "cost": "32 C", "color": Color("#68e3bf")},
+	]
+	for index in range(shop.size()):
+		var item: Dictionary = shop[index]
+		var rect := Rect2(390 + index * 108, y + 25, 98, 45)
+		draw_rect(rect, Color("#0e222d"), true)
+		draw_rect(rect, Color(item.color, 0.55), false, 1.0)
+		draw_circle(rect.position + Vector2(15, 16), 5.0, item.color)
+		draw_string(font, rect.position + Vector2(27, 18), item.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#d8e7ea"))
+		draw_string(font, rect.position + Vector2(27, 33), item.type, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("#72919b"))
+		draw_string(font, rect.position + Vector2(64, 33), item.cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, item.color)
 
 
 func _draw_button(rect: Rect2, label: String, command: String, color: Color) -> void:
@@ -330,6 +417,9 @@ func _handle_click(position: Vector2) -> void:
 			command_requested.emit("speed:%d" % speed)
 		elif Rect2(MARGIN + 218, bottom_y + 20, 118, 38).has_point(position):
 			command_requested.emit("replay")
+		elif position.x >= 390 and position.x < 714:
+			var slot := clampi(int((position.x - 390.0) / 108.0), 0, 2)
+			command_requested.emit("shop:%d" % slot)
 		queue_redraw()
 		return
 	var event_index := _event_at(position, size)

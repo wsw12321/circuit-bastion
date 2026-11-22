@@ -59,6 +59,11 @@ func _on_command_requested(command: String) -> void:
 			simulation.toggle_pause()
 		"replay":
 			view_events.push_front({"time": "REPLAY", "type": "SYSTEM", "text": "事件回放已锁定当前确定性记录", "color": Color("#b690ff")})
+		_:
+			if command.begins_with("shop:"):
+				var slot := int(command.trim_prefix("shop:"))
+				var names := ["滤波器", "缓存", "维修臂"]
+				view_events.push_front({"time": "SHOP", "type": "PREP", "text": "预览 %s · 需要暂停后部署" % names[clampi(slot, 0, names.size() - 1)], "color": Color("#b690ff")})
 	var parts := command.split(":")
 	if parts.size() == 2 and parts[0] == "speed":
 		simulation.set_speed(int(parts[1]))

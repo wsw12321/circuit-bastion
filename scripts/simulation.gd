@@ -1,6 +1,10 @@
 class_name CircuitSimulation
 extends RefCounted
 
+const ContentCatalogScript = preload("res://scripts/content_catalog.gd")
+
+const Replay = preload("res://scripts/replay.gd")
+
 ## Deterministic, UI-independent simulation for the Circuit Bastion vertical slice.
 ## All combat advances in fixed 100 ms steps so a replay is reproducible from
 ## the same seed and command sequence.
@@ -33,6 +37,8 @@ var event_log: Array = []
 var event_sequence := 0
 var next_module_id := 1
 var next_enemy_id := 1
+var catalog: RefCounted
+var replay: RefCounted
 
 const ENEMY_ARCHETYPES := [
 	{"kind": "scout", "label": "侦察蜂", "hp": 34, "speed": 0.12, "damage": 1, "tags": ["light"]},
@@ -55,6 +61,7 @@ const MODULE_ARCHETYPES := {
 }
 
 func _init(initial_seed: int = 1337) -> void:
+	catalog = ContentCatalogScript.new()
 	reset(initial_seed)
 
 func reset(new_seed: int = 1337) -> void:
@@ -78,6 +85,7 @@ func reset(new_seed: int = 1337) -> void:
 	event_sequence = 0
 	next_module_id = 1
 	next_enemy_id = 1
+	replay = Replay.new(seed_value)
 	_emit_event("system", "core", "", "模拟已重置", {"seed": seed_value})
 
 func set_speed(multiplier: float) -> void:
@@ -86,21 +94,25 @@ func set_speed(multiplier: float) -> void:
 		if absf(float(option) - multiplier) < absf(chosen - multiplier):
 			chosen = float(option)
 	speed = chosen
+	_record_command("set_speed", {"speed": speed})
 	_emit_event("control", "core", "", "速度设为 %.0fx" % speed)
 
 func set_paused(value: bool) -> void:
 	paused = value
+	_record_command("set_paused", {"paused": paused})
 	_emit_event("control", "core", "", "战斗%s" % ("暂停" if paused else "继续"))
 
 func toggle_pause() -> void:
 	set_paused(not paused)
 
 func add_module(module_kind: String, grid_position := Vector2i.ZERO) -> String:
-	if not MODULE_ARCHETYPES.has(module_kind):
+	var catalog_spec: Dictionary = catalog.module_spec(module_kind)
+	var fallback_spec: Dictionary = MODULE_ARCHETYPES.get(module_kind, {})
+	var spec: Dictionary = catalog_spec if not catalog_spec.is_empty() else fallback_spec.duplicate(true)
+	if spec.is_empty():
 		return ""
 	var module_id := "M%02d" % next_module_id
 	next_module_id += 1
-	var spec: Dictionary = MODULE_ARCHETYPES[module_kind].duplicate(true)
 	modules[module_id] = {
 		"id": module_id, "kind": module_kind, "label": spec.label,
 		"grid": {"x": grid_position.x, "y": grid_position.y},
@@ -109,6 +121,7 @@ func add_module(module_kind: String, grid_position := Vector2i.ZERO) -> String:
 		"range": float(spec.range), "heat": 0, "heat_limit": 100,
 		"rules": [], "firmware": "standard", "disabled": false,
 	}
+	_record_command("add_module", {"kind": module_kind, "x": grid_position.x, "y": grid_position.y})
 	_emit_event("module", module_id, "", "部署 %s" % spec.label, {"kind": module_kind})
 	return module_id
 
@@ -121,6 +134,7 @@ func connect_modules(from_id: String, to_id: String, connection_kind := "signal"
 		if connection.from == from_id and connection.to == to_id and connection.kind == connection_kind:
 			return false
 	connections.append({"from": from_id, "to": to_id, "kind": connection_kind, "latency": 0.1})
+	_record_command("connect_modules", {"from": from_id, "to": to_id, "kind": connection_kind})
 	_emit_event("connection", from_id, to_id, "建立%s线路" % connection_kind, {"kind": connection_kind})
 	return true
 
@@ -129,6 +143,7 @@ func add_rule(module_id: String, trigger: String, condition: String, action: Str
 		return false
 	var rule := {"trigger": trigger, "condition": condition, "action": action, "priority": priority}
 	modules[module_id].rules.append(rule)
+	_record_command("add_rule", {"module": module_id, "trigger": trigger, "condition": condition, "action": action, "priority": priority})
 	_emit_event("rule", module_id, "", "写入规则 %s → %s" % [trigger, action], rule)
 	return true
 
@@ -141,6 +156,7 @@ func start_battle() -> bool:
 	finished = false
 	victory = false
 	current_wave = 1
+	_record_command("start_battle")
 	_spawn_wave(current_wave)
 	_emit_event("wave", "core", "", "第 1 波开始", {"wave": current_wave})
 	return true
@@ -172,7 +188,9 @@ func _step_fixed() -> void:
 		_finish_wave()
 
 func _update_modules() -> void:
-	for module_id in modules.keys():
+	var module_ids: Array = modules.keys()
+	module_ids.sort()
+	for module_id in module_ids:
 		var module: Dictionary = modules[module_id]
 		if module.disabled:
 			continue
@@ -207,7 +225,9 @@ func _update_modules() -> void:
 func _find_target(module: Dictionary) -> String:
 	var best_id := ""
 	var best_progress := 2.0
-	for enemy_id in enemies.keys():
+	var enemy_ids: Array = enemies.keys()
+	enemy_ids.sort()
+	for enemy_id in enemy_ids:
 		var enemy: Dictionary = enemies[enemy_id]
 		var distance := absf(float(enemy.progress) - 0.5)
 		if distance <= float(module.range) and float(enemy.progress) < best_progress:
@@ -229,7 +249,9 @@ func _rule_allows_attack(module: Dictionary, enemy: Dictionary) -> bool:
 	return false
 
 func _update_enemies() -> void:
-	for enemy_id in enemies.keys().duplicate():
+	var enemy_ids: Array = enemies.keys()
+	enemy_ids.sort()
+	for enemy_id in enemy_ids:
 		if not enemies.has(enemy_id):
 			continue
 		var enemy: Dictionary = enemies[enemy_id]
@@ -245,12 +267,28 @@ func _update_enemies() -> void:
 			_emit_event("defeat", "core", "", "核心已失守")
 
 func _spawn_wave(wave_index: int) -> void:
-	var count := 3 + wave_index
+	var wave_spec: Dictionary = catalog.wave_spec(wave_index)
+	var count := int(wave_spec.get("count", 3 + wave_index))
+	var pool: Array = wave_spec.get("pool", []).duplicate()
+	if pool.is_empty():
+		for archetype in ENEMY_ARCHETYPES:
+			pool.append(archetype.kind)
 	for index in count:
-		var archetype: Dictionary = ENEMY_ARCHETYPES[_next_random() % ENEMY_ARCHETYPES.size()].duplicate(true)
+		var kind: String = str(pool[_next_random() % pool.size()])
+		var archetype: Dictionary = catalog.enemy_spec(kind)
+		if archetype.is_empty():
+			for fallback in ENEMY_ARCHETYPES:
+				if fallback.kind == kind:
+					archetype = fallback.duplicate(true)
+					break
+		if archetype.is_empty():
+			continue
 		_spawn_enemy(archetype, wave_index, index)
 	if wave_index == WAVE_COUNT:
-		_spawn_enemy({"kind": "boss", "label": "熔断主宰", "hp": 520, "speed": 0.025, "damage": 12, "tags": ["boss", "armored"]}, wave_index, count)
+		var boss: Dictionary = catalog.enemy_spec("boss")
+		if boss.is_empty():
+			boss = {"kind": "boss", "label": "熔断主宰", "hp": 520, "speed": 0.025, "damage": 12, "tags": ["boss", "armored"]}
+		_spawn_enemy(boss, wave_index, count)
 
 func _spawn_enemy(archetype: Dictionary, wave_index: int, ordinal: int) -> void:
 	var enemy_id := "E%03d" % next_enemy_id
@@ -283,6 +321,7 @@ func get_snapshot() -> Dictionary:
 		"speed": speed, "paused": paused, "running": running,
 		"finished": finished, "victory": victory, "wave": current_wave,
 		"integrity": base_integrity, "charge": charge,
+		"content_signature": catalog.content_signature(),
 		"modules": modules.duplicate(true), "connections": connections.duplicate(true),
 		"enemies": enemies.duplicate(true), "events": event_log.duplicate(true),
 	}
@@ -290,6 +329,64 @@ func get_snapshot() -> Dictionary:
 ## Compatibility name used by the first desktop scene draft.
 func snapshot() -> Dictionary:
 	return get_snapshot()
+
+func export_replay() -> String:
+	return replay.encode() if replay != null else ""
+
+func save_state() -> Dictionary:
+	return {
+		"version": 1,
+		"snapshot": get_snapshot(),
+		"runtime": {
+			"rng_state": rng_state,
+			"accumulator": accumulator,
+			"event_sequence": event_sequence,
+			"next_module_id": next_module_id,
+			"next_enemy_id": next_enemy_id,
+		},
+		"replay": replay.to_dict() if replay != null else {},
+	}
+
+func export_save() -> String:
+	return JSON.stringify(save_state())
+
+func import_save(encoded: String) -> bool:
+	var parsed = JSON.parse_string(encoded)
+	if not parsed is Dictionary:
+		return false
+	return load_state(parsed)
+
+func load_state(state: Dictionary) -> bool:
+	var snapshot_state = state.get("snapshot", {})
+	if not snapshot_state is Dictionary:
+		return false
+	seed_value = int(snapshot_state.get("seed", seed_value))
+	tick_count = int(snapshot_state.get("tick", 0))
+	elapsed = float(snapshot_state.get("elapsed", 0.0))
+	speed = float(snapshot_state.get("speed", 1.0))
+	paused = bool(snapshot_state.get("paused", true))
+	running = bool(snapshot_state.get("running", false))
+	finished = bool(snapshot_state.get("finished", false))
+	victory = bool(snapshot_state.get("victory", false))
+	current_wave = int(snapshot_state.get("wave", 0))
+	base_integrity = int(snapshot_state.get("integrity", 100))
+	charge = int(snapshot_state.get("charge", 120))
+	modules = snapshot_state.get("modules", {}).duplicate(true)
+	connections = snapshot_state.get("connections", []).duplicate(true)
+	enemies = snapshot_state.get("enemies", {}).duplicate(true)
+	event_log = snapshot_state.get("events", []).duplicate(true)
+	var runtime_state = state.get("runtime", {})
+	if runtime_state is Dictionary:
+		rng_state = int(runtime_state.get("rng_state", rng_state))
+		accumulator = float(runtime_state.get("accumulator", 0.0))
+		event_sequence = int(runtime_state.get("event_sequence", event_log.size()))
+		next_module_id = int(runtime_state.get("next_module_id", modules.size() + 1))
+		next_enemy_id = int(runtime_state.get("next_enemy_id", enemies.size() + 1))
+	var replay_state = state.get("replay", {})
+	replay = Replay.new(seed_value)
+	if replay_state is Dictionary:
+		replay.commands = replay_state.get("commands", []).duplicate(true)
+	return true
 
 func get_event_log(limit := 100) -> Array:
 	return event_log.slice(maxi(0, event_log.size() - limit))
@@ -316,4 +413,8 @@ func _emit_event(kind: String, source: String, target: String, message: String, 
 		event_log.pop_front()
 	event_recorded.emit(event)
 	event_emitted.emit(event)
+
+func _record_command(command: String, payload: Dictionary = {}) -> void:
+	if replay != null:
+		replay.record(tick_count, command, payload)
 

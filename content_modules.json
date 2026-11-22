@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "modules": [
+    {"kind":"scanner","label":"扫描器","role":"observe","power":1,"damage":0,"cooldown":0.0,"range":0.45,"heat":1,"ports":["signal_out"]},
+    {"kind":"pulse_cannon","label":"脉冲炮","role":"execute","power":3,"damage":18,"cooldown":0.8,"range":0.5,"heat":5,"ports":["signal_in","target_out"]},
+    {"kind":"railgun","label":"轨道炮","role":"execute","power":6,"damage":42,"cooldown":1.8,"range":0.85,"heat":11,"ports":["signal_in","target_out"]},
+    {"kind":"router","label":"路由器","role":"process","power":2,"damage":0,"cooldown":0.0,"range":0.0,"heat":1,"ports":["signal_in","signal_out","signal_out"]},
+    {"kind":"capacitor","label":"电容","role":"infrastructure","power":-2,"damage":0,"cooldown":0.0,"range":0.0,"heat":-2,"ports":["power_out"]},
+    {"kind":"heat_sink","label":"散热器","role":"infrastructure","power":1,"damage":0,"cooldown":0.0,"range":0.0,"heat":-5,"ports":["heat_in"]},
+    {"kind":"slow_field","label":"减速场","role":"execute","power":4,"damage":4,"cooldown":1.2,"range":0.3,"heat":7,"ports":["signal_in","field_out"]},
+    {"kind":"repair_arm","label":"维修臂","role":"infrastructure","power":3,"damage":0,"cooldown":2.0,"range":0.0,"heat":4,"ports":["signal_in","repair_out"]}
+  ]
+}

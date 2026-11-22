@@ -32,6 +32,10 @@ case "${PRESET}" in
 esac
 
 "${GODOT_BIN}" --headless --path "${ROOT_DIR}" --export-release "${PRESET}" "${executable}"
+if [[ ! -f "${executable}" && ! -d "${executable}" ]]; then
+  echo "Godot export did not produce the expected output: ${executable}" >&2
+  exit 1
+fi
 cp "${ROOT_DIR}/README.md" "${ROOT_DIR}/RUNNING.md" "${PACKAGE_DIR}/"
 cat > "${PACKAGE_DIR}/VERSION.txt" <<EOF
 Circuit Bastion Godot desktop build

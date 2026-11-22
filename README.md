@@ -423,3 +423,5 @@ godot4 --headless --path . --script scripts/simulation_probe.gd
 README、RUNNING.md 和版本信息。Node.js SEA 与 portable 包继续作为兼容 fallback。
 
 仓库中的 Node.js 页面仍保留用于设计稿对照和发行包 fallback，桌面垂直切片是后续玩法实现的主技术方向。
+
+桌面版的分层、确定性模拟契约和后续扩展路线见 [ARCHITECTURE.md](ARCHITECTURE.md)。模块、敌人、波次和规则的首批数据位于 `content_*.json`，由 `scripts/content_catalog.gd` 加载并写入内容签名。
