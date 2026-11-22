@@ -153,7 +153,15 @@ func set_snapshot(value: Dictionary) -> void:
 	queue_redraw()
 
 func highlight_event(event: Dictionary) -> void:
-	route_focus = str(event.get("type", event.get("kind", ""))).to_upper()
+	var kind := str(event.get("type", event.get("kind", ""))).to_upper()
+	if kind in ["ACTION", "HIT", "ENEMY_DESTROYED", "SIGNAL", "CONNECTION", "RULE"]:
+		route_focus = "SIGNAL"
+	elif kind in ["BREACH", "OVERHEAT", "DISCONNECT"]:
+		route_focus = "BREACH"
+	elif kind in ["POWER", "ENERGY", "CONTROL"]:
+		route_focus = "POWER"
+	else:
+		route_focus = kind
 	queue_redraw()
 
 
