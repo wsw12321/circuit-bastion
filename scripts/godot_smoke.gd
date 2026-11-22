@@ -21,7 +21,21 @@ func _run() -> void:
 	if instance.get_child_count() < 1:
 		_fail("composition root did not create the BattleView")
 		return
-	print("GODOT_SMOKE_OK children=%d root_script=%s" % [instance.get_child_count(), instance.get_script().resource_path])
+	var battle_view_loaded := false
+	var overlay_loaded := false
+	for child: Node in instance.get_children():
+		if child.get_script() != null and child.get_script().resource_path == "res://godot/battle_view.gd":
+			battle_view_loaded = true
+			for nested: Node in child.get_children():
+				if nested.get_script() != null and nested.get_script().resource_path == "res://godot/battle_ui_overlay.gd":
+					overlay_loaded = true
+	if not battle_view_loaded:
+		_fail("BattleView script could not be instantiated")
+		return
+	if not overlay_loaded:
+		_fail("BattleUIOverlay script could not be instantiated")
+		return
+	print("GODOT_SMOKE_OK children=%d root_script=%s battle_view=true overlay=true" % [instance.get_child_count(), instance.get_script().resource_path])
 	quit(0)
 
 func _fail(message: String) -> void:
