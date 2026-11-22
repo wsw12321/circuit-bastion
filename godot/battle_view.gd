@@ -219,6 +219,7 @@ func _draw_battlefield(size: Vector2) -> void:
 	_draw_modules(origin, cell_size)
 	_draw_build_preview(origin, cell_size)
 	_draw_enemies(origin, cell_size)
+	_draw_route_fx(origin, cell_size)
 	_draw_path_legend(board)
 
 
@@ -267,6 +268,9 @@ func _draw_routes(origin: Vector2, cell_size: float) -> void:
 	for point in signal_points:
 		draw_circle(point, 3.0 + sin(phase + point.x * 0.02) * 1.0, Color("#a7f0ff"))
 	var packet_t := fmod(phase * 0.18, 1.0)
+	for trail in range(3):
+		var trail_progress := fmod(packet_t - float(trail) * 0.035 + 1.0, 1.0)
+		_draw_packet(signal_points, trail_progress, Color(route_flash_color, 0.35 - float(trail) * 0.09), maxf(1.5, 3.5 - float(trail) * 0.6))
 	_draw_packet(signal_points, packet_t, route_flash_color, 5.0 + route_flash * 5.0)
 	_draw_packet(energy_points, fmod(packet_t + 0.35, 1.0), Color("#ffca62"), 3.0)
 	if route_flash > 0.0:
