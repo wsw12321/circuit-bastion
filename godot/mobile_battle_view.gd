@@ -147,7 +147,7 @@ func _gui_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			_cancel_interaction("已取消部署")
 	elif event is InputEventMouseMotion:
-		if event.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT):
+		if (event.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT)) != 0:
 			return
 		hover_cell = _cell_at_mobile(event.position)
 		if build_mode or not dragging_module_id.is_empty():
