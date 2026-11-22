@@ -83,3 +83,42 @@ jobs:
           "$GODOT_BIN" --headless --path . --script scripts/audio_feedback_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          PERF_BUDGET_MS=5000 "$GODOT_BIN" --headless --path . --script scripts/performance_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/resource_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+
+
+  godot-windows-smoke:
+    name: Godot native smoke (Windows)
+    runs-on: windows-2022
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pinned Godot editor
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot_root="$RUNNER_TEMP/godot"
+          mkdir -p "$godot_root"
+          curl --fail --retry 3 --location \
+            "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_win64.exe.zip" \
+            --output "$godot_root/editor.zip"
+          unzip -q "$godot_root/editor.zip" -d "$godot_root/editor"
+          godot_bin="$godot_root/editor/Godot_v4.3-stable_win64.exe"
+          test -f "$godot_bin"
+          echo "GODOT_BIN=$godot_bin" >> "$GITHUB_ENV"
+
+      - name: Run native Windows smoke checks
+        shell: bash
+        env:
+          PERF_BUDGET_MS: '10000'
+        run: |
+          "$GODOT_BIN" --headless --path . --script scripts/godot_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/simulation_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/qa_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/performance_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/resource_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility

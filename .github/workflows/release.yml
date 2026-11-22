@@ -99,6 +99,10 @@ jobs:
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd \
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          PERF_BUDGET_MS=5000 "$GODOT_BIN" --headless --path . --script scripts/performance_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/resource_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 
       - name: Export Linux x64 Godot build
         run: bash scripts/package-godot-release.sh "Linux/X11" "circuit-bastion-godot-linux-x64" "$GITHUB_REF_NAME"
@@ -113,13 +117,10 @@ jobs:
           path: dist/godot/*.zip
           if-no-files-found: error
 
-  android_optional:
-    name: Godot Android arm64 APK (optional)
+  android-required:
+    name: Godot Android arm64 APK
     runs-on: ubuntu-22.04
     timeout-minutes: 25
-    continue-on-error: true
-    outputs:
-      ready: ${{ steps.android_ready.outputs.ready }}
 
     steps:
       - name: Check out repository
@@ -138,10 +139,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Install pinned Godot editor and Android export template
+      - name: Install pinned Godot editor and Android export templates
         shell: bash
         env:
           GODOT_VERSION: 4.3
@@ -152,67 +153,65 @@ jobs:
           template_root="$HOME/.local/share/godot/export_templates"
           mkdir -p "$godot_root" "$template_root"
           curl --fail --retry 3 --location \
-            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" \
+            "https://github.com/godotengine/godot/releases/download/\${GODOT_RELEASE}/Godot_v\${GODOT_VERSION}-stable_linux.x86_64.zip" \
             --output "$godot_root/editor.zip"
           unzip -q "$godot_root/editor.zip" -d "$godot_root/editor"
-          mv "$godot_root/editor/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$godot_root/godot"
+          mv "$godot_root/editor/Godot_v\${GODOT_VERSION}-stable_linux.x86_64" "$godot_root/godot"
           chmod +x "$godot_root/godot"
           curl --fail --retry 3 --location \
-            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" \
+            "https://github.com/godotengine/godot/releases/download/\${GODOT_RELEASE}/Godot_v\${GODOT_VERSION}-stable_export_templates.tpz" \
             --output "$godot_root/templates.tpz"
           unzip -q "$godot_root/templates.tpz" -d "$godot_root/templates"
-          template_source="$(find "$godot_root/templates" -type f -name 'android_release.apk' -printf '%h\n' | head -n 1)"
-          if [[ -z "$template_source" || ! -d "$template_source" ]]; then
-            echo "Godot Android export template directory was not found" >&2
-            find "$godot_root/templates" -maxdepth 4 -print >&2
-            exit 1
-          fi
-          template_version="${GODOT_VERSION}.stable"
-          if [[ -f "$template_source/version.txt" ]]; then
-            version_from_file="$(tr -d '\r\n' < "$template_source/version.txt")"
-            if [[ "$version_from_file" =~ ^[0-9]+\.[0-9]+\.stable$ ]]; then
-              template_version="$version_from_file"
-            fi
-          fi
-          template_destination="$template_root/$template_version"
+          template_source="$(find "$godot_root/templates" -type f -name 'android_debug.apk' -printf '%h\n' | head -n 1)"
+          test -n "$template_source"
+          template_destination="$template_root/\${GODOT_VERSION}.stable"
           mkdir -p "$template_destination"
           cp -R "$template_source/." "$template_destination/"
-          test -f "$template_destination/android_release.apk"
+          test -f "$template_destination/android_debug.apk"
           echo "GODOT_BIN=$godot_root/godot" >> "$GITHUB_ENV"
 
-      - name: Run mobile contract smoke check
+      - name: Generate standard debug keystore
+        shell: bash
         run: |
-          "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd \
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [[ ! -f "$HOME/.android/debug.keystore" ]]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Run Android contract probe
+        run: |
+          "$GODOT_BIN" --headless --path . --script scripts/android_probe.gd \
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 
       - name: Export Android arm64 debug APK
         shell: bash
         run: |
           set -euo pipefail
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$HOME/.android/debug.keystore"
+          export GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android
           mkdir -p dist/godot
           "$GODOT_BIN" --headless --path . --export-debug "Android" \
-            "dist/godot/circuit-bastion-android-arm64.apk"
+            dist/godot/circuit-bastion-android-arm64.apk
           test -s dist/godot/circuit-bastion-android-arm64.apk
-          unzip -t dist/godot/circuit-bastion-android-arm64.apk >/dev/null
-          unzip -l dist/godot/circuit-bastion-android-arm64.apk | grep -q 'lib/arm64-v8a/'
-          cp README.md RUNNING.md dist/godot/
-          printf 'Circuit Bastion Android arm64 debug APK\nVersion: %s\n' "$GITHUB_REF_NAME" > dist/godot/ANDROID-VERSION.txt
+          unzip -tq dist/godot/circuit-bastion-android-arm64.apk >/dev/null
+          test "$(stat -c %s dist/godot/circuit-bastion-android-arm64.apk)" -le 104857600
 
-      - name: Upload Android APK artifact
+      - name: Upload Android release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: circuit-bastion-android-arm64
-          path: |
-            dist/godot/circuit-bastion-android-arm64.apk
-            dist/godot/README.md
-            dist/godot/RUNNING.md
-            dist/godot/ANDROID-VERSION.txt
+          name: circuit-bastion-godot-android-arm64
+          path: dist/godot/circuit-bastion-android-arm64.apk
           if-no-files-found: error
-
-      - name: Mark Android artifact ready
-        id: android_ready
-        if: success()
-        run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
   sea-required:
     name: SEA ${{ matrix.platform }} ${{ matrix.arch }}
@@ -262,98 +261,8 @@ jobs:
           path: dist/sea/${{ matrix.executable }}
           if-no-files-found: error
 
-  sea_arm64:
-    name: SEA macOS arm64 (optional)
-    runs-on: macos-14
-    timeout-minutes: 10
-    continue-on-error: true
-    outputs:
-      ready: ${{ steps.arm64_ready.outputs.ready }}
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install SEA tooling
-        run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Check JavaScript syntax
-        run: npm run check
-
-      - name: Build SEA executable
-        env:
-          SEA_NAME: circuit-bastion-macos-arm64
-          SEA_OUTPUT_DIR: dist/sea
-        run: npm run build:sea
-
-      - name: Smoke test SEA executable
-        run: node scripts/smoke-sea.mjs dist/sea/circuit-bastion-macos-arm64
-
-      - name: Upload optional SEA executable
-        uses: actions/upload-artifact@v4
-        with:
-          name: circuit-bastion-sea-macos-arm64
-          path: dist/sea/circuit-bastion-macos-arm64
-          if-no-files-found: error
-
-      - name: Mark arm64 artifact ready
-        id: arm64_ready
-        if: success()
-        shell: bash
-        run: echo "ready=true" >> "$GITHUB_OUTPUT"
-
-  sea_macos_x64:
-    name: SEA macOS x64 (optional)
-    runs-on: macos-13
-    timeout-minutes: 10
-    continue-on-error: true
-    outputs:
-      ready: ${{ steps.macos_x64_ready.outputs.ready }}
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install SEA tooling
-        run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Check JavaScript syntax
-        run: npm run check
-
-      - name: Build SEA executable
-        env:
-          SEA_NAME: circuit-bastion-macos-x64
-          SEA_OUTPUT_DIR: dist/sea
-        run: npm run build:sea
-
-      - name: Smoke test SEA executable
-        run: node scripts/smoke-sea.mjs dist/sea/circuit-bastion-macos-x64
-
-      - name: Upload optional SEA executable
-        uses: actions/upload-artifact@v4
-        with:
-          name: circuit-bastion-sea-macos-x64
-          path: dist/sea/circuit-bastion-macos-x64
-          if-no-files-found: error
-
-      - name: Mark macOS x64 artifact ready
-        id: macos_x64_ready
-        if: success()
-        shell: bash
-        run: echo "ready=true" >> "$GITHUB_OUTPUT"
-
   publish:
-    needs: [portable, godot-required, sea-required]
+    needs: [portable, godot-required, android-required, sea-required]
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -385,6 +294,12 @@ jobs:
           name: circuit-bastion-godot
           path: release-assets/circuit-bastion-godot
 
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: circuit-bastion-godot-android-arm64
+          path: release-assets/circuit-bastion-godot-android-arm64
+
       - name: Assemble platform archives
         shell: bash
         run: |
@@ -392,6 +307,7 @@ jobs:
           mkdir -p release-dist
           cp release-assets/circuit-bastion-portable/*.zip release-dist/
           cp release-assets/circuit-bastion-godot/*.zip release-dist/
+          cp release-assets/circuit-bastion-godot-android-arm64/*.apk release-dist/
 
           for artifact_dir in release-assets/circuit-bastion-sea-*; do
             executable=$(find "$artifact_dir" -maxdepth 1 -type f -print -quit)
@@ -409,106 +325,25 @@ jobs:
             )
           done
 
+      - name: Validate release artifacts and write checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/validate-release-assets.sh release-dist
+          (
+            cd release-dist
+            find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS.txt
+          )
+
       - name: Create GitHub Release and upload archives
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" release-dist/*.zip --clobber
+            gh release upload "$GITHUB_REF_NAME" release-dist/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" release-dist/*.zip \
+            gh release create "$GITHUB_REF_NAME" release-dist/* \
               --title "Circuit Bastion ${GITHUB_REF_NAME}" \
               --generate-notes
           fi
 
-  publish_android:
-    needs: [publish, android_optional]
-    if: ${{ always() && needs.publish.result == 'success' && needs.android_optional.outputs.ready == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Download Android artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: circuit-bastion-android-arm64
-          path: release-assets/circuit-bastion-android-arm64
-
-      - name: Upload Android APK to GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" release-assets/circuit-bastion-android-arm64/circuit-bastion-android-arm64.apk --clobber
-
-  publish_arm64:
-    needs: [publish, sea_arm64]
-    if: ${{ always() && needs.publish.result == 'success' && needs.sea_arm64.outputs.ready == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Download optional arm64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: circuit-bastion-sea-macos-arm64
-          path: release-assets/circuit-bastion-sea-macos-arm64
-
-      - name: Assemble optional arm64 archive
-        shell: bash
-        run: |
-          set -euo pipefail
-          package_name=circuit-bastion-macos-arm64
-          package_dir="release-dist/${package_name}"
-          mkdir -p "$package_dir"
-          executable=$(find release-assets/circuit-bastion-sea-macos-arm64 -maxdepth 1 -type f -print -quit)
-          cp "$executable" "$package_dir/"
-          cp README.md RUNNING.md "$package_dir/"
-          chmod +x "$package_dir/$(basename "$executable")"
-          (
-            cd release-dist
-            zip -qr "${package_name}.zip" "$package_name"
-          )
-
-      - name: Upload optional arm64 archive
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" release-dist/circuit-bastion-macos-arm64.zip --clobber
-
-  publish_macos_x64:
-    needs: [publish, sea_macos_x64]
-    if: ${{ always() && needs.publish.result == 'success' && needs.sea_macos_x64.outputs.ready == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Download optional macOS x64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: circuit-bastion-sea-macos-x64
-          path: release-assets/circuit-bastion-sea-macos-x64
-
-      - name: Assemble optional macOS x64 archive
-        shell: bash
-        run: |
-          set -euo pipefail
-          package_name=circuit-bastion-macos-x64
-          package_dir="release-dist/${package_name}"
-          mkdir -p "$package_dir"
-          executable=$(find release-assets/circuit-bastion-sea-macos-x64 -maxdepth 1 -type f -print -quit)
-          cp "$executable" "$package_dir/"
-          cp README.md RUNNING.md "$package_dir/"
-          chmod +x "$package_dir/$(basename "$executable")"
-          (
-            cd release-dist
-            zip -qr "${package_name}.zip" "$package_name"
-          )
-
-      - name: Upload optional macOS x64 archive
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" release-dist/circuit-bastion-macos-x64.zip --clobber
