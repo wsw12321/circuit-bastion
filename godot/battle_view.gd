@@ -1138,6 +1138,9 @@ func _update_fx(delta: float) -> void:
 		else:
 			fx_items[index] = fx
 	wave_banner_time = maxf(0.0, wave_banner_time - delta)
+	screen_feedback_time = maxf(0.0, screen_feedback_time - delta)
+	screen_feedback_strength = maxf(0.0, screen_feedback_strength - delta * 1.8)
+	wave_rhythm_phase = fmod(wave_rhythm_phase + delta * (1.4 if wave_banner_time > 0.0 else 0.7), TAU)
 	result_transition_time += delta
 
 func _start_wave_banner(text: String, color: Color) -> void:
