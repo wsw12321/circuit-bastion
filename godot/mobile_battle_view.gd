@@ -10,6 +10,9 @@ const MOBILE_BOTTOM_BAR_HEIGHT := 104.0
 const MOBILE_MARGIN := 14.0
 
 var touch_start := Vector2(-1.0, -1.0)
+var touch_positions: Dictionary = {}
+var touch_dragged := false
+var pinch_distance := -1.0
 
 func _ready() -> void:
 	super._ready()
@@ -105,15 +108,34 @@ func _mobile_grid(size: Vector2) -> Dictionary:
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
-			touch_start = event.position
+			touch_positions[event.index] = event.position
+			if touch_positions.size() == 1:
+				touch_start = event.position
+				touch_dragged = false
+			elif touch_positions.size() == 2:
+				pinch_distance = _touch_distance()
 			hover_cell = _cell_at_mobile(event.position)
 			queue_redraw()
 		else:
-			var is_tap := touch_start.x >= 0.0 and touch_start.distance_to(event.position) <= 48.0
-			touch_start = Vector2(-1.0, -1.0)
+			var is_tap := touch_positions.size() == 1 and not touch_dragged and touch_start.x >= 0.0 and touch_start.distance_to(event.position) <= 48.0
+			touch_positions.erase(event.index)
+			if touch_positions.size() < 2:
+				pinch_distance = -1.0
+			if touch_positions.is_empty():
+				touch_start = Vector2(-1.0, -1.0)
+				touch_dragged = false
 			if is_tap:
 				_handle_mobile_click(event.position)
 	elif event is InputEventScreenDrag:
+		touch_positions[event.index] = event.position
+		touch_dragged = true
+		if touch_positions.size() >= 2:
+			var current_distance := _touch_distance()
+			if pinch_distance > 0.0:
+				_zoom_battle_camera((pinch_distance - current_distance) * 0.035)
+			pinch_distance = current_distance
+		else:
+			_rotate_battle_camera(event.relative)
 		hover_cell = _cell_at_mobile(event.position)
 		queue_redraw()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -125,6 +147,13 @@ func _gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		hover_cell = _cell_at_mobile(event.position)
 		queue_redraw()
+
+
+func _touch_distance() -> float:
+	if touch_positions.size() < 2:
+		return -1.0
+	var points: Array = touch_positions.values()
+	return (points[0] as Vector2).distance_to(points[1] as Vector2)
 
 func _handle_mobile_click(position: Vector2) -> void:
 	var size := get_rect().size
