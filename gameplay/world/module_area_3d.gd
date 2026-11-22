@@ -18,6 +18,7 @@ var health := 100
 var contact_radius := 0.62
 var _configured := false
 var _mesh_material: StandardMaterial3D
+var _collision_body: StaticBody3D
 
 func _ready() -> void:
 	collision_layer = MODULE_COLLISION_LAYER
@@ -34,6 +35,7 @@ func _ready() -> void:
 	blocker.name = "ModuleCollisionBody"
 	blocker.collision_layer = MODULE_COLLISION_LAYER
 	blocker.collision_mask = ENEMY_COLLISION_LAYER
+	_collision_body = blocker
 	var blocker_shape := CollisionShape3D.new()
 	var blocker_sphere := SphereShape3D.new()
 	blocker_sphere.radius = contact_radius
@@ -57,6 +59,9 @@ func _ready() -> void:
 	add_child(mesh_instance)
 
 func configure(state: Dictionary, world_position: Vector3) -> void:
+	if _collision_body != null:
+		_collision_body.collision_layer = MODULE_COLLISION_LAYER
+		_collision_body.collision_mask = ENEMY_COLLISION_LAYER
 	module_id = str(state.get("id", module_id))
 	kind = str(state.get("kind", kind))
 	if _mesh_material != null:
@@ -81,6 +86,9 @@ func receive_hit(attacker_id: String, damage: int) -> void:
 	if applied == 0 or health <= 0:
 		return
 	health = maxi(0, health - applied)
+	if health <= 0 and _collision_body != null:
+		_collision_body.collision_layer = 0
+		_collision_body.collision_mask = 0
 	hit_received.emit(module_id, attacker_id, applied, health)
 
 func is_destroyed() -> bool:
