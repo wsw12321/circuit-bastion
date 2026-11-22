@@ -1,6 +1,7 @@
 extends SceneTree
 
 ## Headless contract for the minimal 3D battlefield slice.
+## Android export verification runs the same scene and collision contract.
 
 const Simulation := preload("res://scripts/simulation.gd")
 const BattlefieldScene := preload("res://godot/scenes/battle_3d.tscn")
