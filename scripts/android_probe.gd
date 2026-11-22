@@ -55,6 +55,15 @@ func _run() -> void:
 		if not mobile_source.contains(required):
 			_fail("Android camera gesture contract is missing: " + required)
 			return
+	var world_source_file := FileAccess.open("res://gameplay/world/battle_world_3d.gd", FileAccess.READ)
+	if world_source_file == null:
+		_fail("3D world source could not be opened")
+		return
+	var world_source := world_source_file.get_as_text()
+	for required in ["OS.has_feature(\"mobile\")", "OS.has_feature(\"android\")"]:
+		if not world_source.contains(required):
+			_fail("Android camera composition contract is missing: " + required)
+			return
 	var view = selected_script.new()
 	if view == null or not view.has_method("_cell_at_mobile"):
 		_fail("touch-capable MobileBattleView could not be instantiated")
