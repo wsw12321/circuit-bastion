@@ -31,6 +31,8 @@ func _ready() -> void:
 	view.set_simulation(simulation)
 	if view.has_method("set_battle_world"):
 		view.set_battle_world(world)
+	world.deployment_rejected.connect(_on_deployment_rejected)
+	world.deployment_snapped.connect(_on_deployment_snapped)
 	simulation.event_recorded.connect(_on_event_recorded)
 	simulation.state_changed.connect(_on_state_changed)
 	view.command_requested.connect(_on_command_requested)
@@ -49,6 +51,22 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if is_instance_valid(world):
 		world.step_world(delta)
+
+func _on_deployment_rejected(kind: String, grid_position: Vector2i, reason: String) -> void:
+	if not is_instance_valid(view):
+		return
+	view.set("feedback_message", "部署被阻止 · %s [%d,%d]" % [reason, grid_position.x, grid_position.y])
+	view.set("feedback_tone", "warn")
+	if view.has_method("_trigger_screen_feedback"):
+		view.call("_trigger_screen_feedback", 0.42, 0.28)
+	view.queue_redraw()
+
+func _on_deployment_snapped(module_id: String, grid_position: Vector2i, _world_position: Vector3) -> void:
+	if not is_instance_valid(view):
+		return
+	view.set("feedback_message", "部署已吸附 · %s [%d,%d]" % [module_id, grid_position.x, grid_position.y])
+	view.set("feedback_tone", "ok")
+	view.queue_redraw()
 
 func _on_event_recorded(event: Dictionary) -> void:
 	var audio_bus := get_node_or_null("/root/AudioFeedback")
