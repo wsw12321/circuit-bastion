@@ -24,6 +24,7 @@ var path_curve: Curve3D
 var initialized := false
 var _visual_kind := ""
 var _visual_root: Node3D
+var _ornament_root: Node3D
 var _body_material: StandardMaterial3D
 var _eye_material: StandardMaterial3D
 var _health_fill: MeshInstance3D
@@ -71,14 +72,21 @@ func _build_visuals() -> void:
 	_visual_kind = kind
 	_body_material = StandardMaterial3D.new()
 	_body_material.albedo_color = _tint()
+	_body_material.roughness = 0.46
+	_body_material.metallic = 0.22
 	_body_material.emission_enabled = true
 	_body_material.emission = _tint() * 0.18
 	_body_material.emission_energy_multiplier = 0.9
 	_eye_material = StandardMaterial3D.new()
 	_eye_material.albedo_color = Color("#fff3cc")
+	_eye_material.roughness = 0.18
+	_eye_material.metallic = 0.08
 	_eye_material.emission_enabled = true
 	_eye_material.emission = _tint()
 	_eye_material.emission_energy_multiplier = 3.0
+	_ornament_root = Node3D.new()
+	_ornament_root.name = "EnemyOrnaments"
+	_visual_root.add_child(_ornament_root)
 
 	var body := MeshInstance3D.new()
 	body.name = "EnemyBody"
@@ -126,6 +134,19 @@ func _build_visuals() -> void:
 		crown.position.y = 0.58
 		crown.material_override = _eye_material
 		_visual_root.add_child(crown)
+	elif kind == "jammer":
+		_add_antenna()
+		_add_signal_ring("JammerRing", 0.62, 0.14, _eye_material)
+		_add_signal_ring("JammerRingInner", 0.40, 0.08, _body_material)
+	elif kind == "phase":
+		_add_phase_shell()
+		_add_signal_ring("PhaseRing", 0.58, 0.05, _eye_material)
+	elif kind == "leech":
+		_add_segmented_tail()
+	elif kind == "carrier":
+		_add_cargo_pods()
+		_add_fin(Vector3(-0.52, 0.06, 0.0), -90.0)
+		_add_fin(Vector3(0.52, 0.06, 0.0), 90.0)
 	else:
 		_add_fin(Vector3(0.0, 0.14, -0.52), 0.0)
 
@@ -152,6 +173,86 @@ func _add_armor(position: Vector3, size: Vector3) -> void:
 	armor.position = position
 	armor.material_override = _body_material
 	_visual_root.add_child(armor)
+
+func _add_antenna() -> void:
+	var antenna := MeshInstance3D.new()
+	antenna.name = "JammerAntenna"
+	var antenna_mesh := CylinderMesh.new()
+	antenna_mesh.top_radius = 0.04
+	antenna_mesh.bottom_radius = 0.08
+	antenna_mesh.height = 0.64
+	antenna_mesh.radial_segments = 8
+	antenna.mesh = antenna_mesh
+	antenna.position = Vector3(0.0, 0.62, 0.0)
+	antenna.material_override = _body_material
+	_ornament_root.add_child(antenna)
+	var tip := MeshInstance3D.new()
+	tip.name = "JammerTip"
+	var tip_mesh := SphereMesh.new()
+	tip_mesh.radius = 0.10
+	tip_mesh.height = 0.20
+	tip.mesh = tip_mesh
+	tip.position = Vector3(0.0, 0.98, 0.0)
+	tip.material_override = _eye_material
+	_ornament_root.add_child(tip)
+
+func _add_signal_ring(node_name: String, radius: float, thickness: float, material: Material) -> void:
+	var ring := MeshInstance3D.new()
+	ring.name = node_name
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = maxf(0.04, radius - thickness)
+	mesh.outer_radius = radius
+	mesh.rings = 12
+	mesh.ring_segments = 6
+	ring.mesh = mesh
+	ring.position.y = 0.22
+	ring.material_override = material
+	_ornament_root.add_child(ring)
+
+func _add_phase_shell() -> void:
+	var shell := MeshInstance3D.new()
+	shell.name = "PhaseShell"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.55
+	mesh.height = 1.05
+	mesh.radial_segments = 12
+	mesh.rings = 6
+	shell.mesh = mesh
+	shell.scale = Vector3(0.78, 1.0, 0.58)
+	var shell_material := StandardMaterial3D.new()
+	shell_material.albedo_color = Color(_tint(), 0.20)
+	shell_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shell_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	shell_material.emission_enabled = true
+	shell_material.emission = _tint()
+	shell_material.emission_energy_multiplier = 0.8
+	shell.material_override = shell_material
+	_ornament_root.add_child(shell)
+
+func _add_segmented_tail() -> void:
+	for index in range(3):
+		var segment := MeshInstance3D.new()
+		segment.name = "LeechSegment_%d" % index
+		var mesh := SphereMesh.new()
+		mesh.radius = 0.21 - float(index) * 0.03
+		mesh.height = mesh.radius * 2.0
+		mesh.radial_segments = 10
+		mesh.rings = 5
+		segment.mesh = mesh
+		segment.position = Vector3(0.0, 0.05, -0.38 - float(index) * 0.25)
+		segment.material_override = _body_material
+		_ornament_root.add_child(segment)
+
+func _add_cargo_pods() -> void:
+	for index in range(2):
+		var cargo := MeshInstance3D.new()
+		cargo.name = "CarrierCargo_%d" % index
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.32, 0.30, 0.30)
+		cargo.mesh = mesh
+		cargo.position = Vector3(-0.25 + float(index) * 0.50, 0.30, -0.26)
+		cargo.material_override = _eye_material
+		_ornament_root.add_child(cargo)
 
 func _create_shadow() -> void:
 	var shadow := MeshInstance3D.new()
@@ -199,6 +300,8 @@ func _create_kind_light() -> void:
 func _flat_material(color: Color, emission: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
+	material.roughness = 0.42
+	material.metallic = 0.12
 	material.emission_enabled = true
 	material.emission = emission
 	material.emission_energy_multiplier = 1.1
@@ -230,6 +333,8 @@ func _process(delta: float) -> void:
 	var bob := sin(_phase) * 0.035
 	_visual_root.position.y = bob
 	_visual_root.rotation.y = sin(_phase * 0.4) * 0.04
+	if _ornament_root != null:
+		_ornament_root.rotation.y = _phase * (0.20 if kind in ["jammer", "phase"] else 0.06)
 	if _body_material != null:
 		_body_material.emission_energy_multiplier = 1.5 if _hit_flash > 0.0 else 0.9
 
