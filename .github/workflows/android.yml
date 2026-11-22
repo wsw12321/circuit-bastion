@@ -38,7 +38,7 @@ jobs:
       - name: Install Android SDK packages
         shell: bash
         run: |
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
           yes | sdkmanager --licenses >/dev/null || true
 
       - name: Install Godot editor and export templates
@@ -98,6 +98,9 @@ jobs:
       - name: Export Android ARM64 debug APK
         run: |
           set -euo pipefail
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$HOME/.android/debug.keystore"
+          export GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android
           mkdir -p dist/godot
           "$GODOT_BIN" --headless --path . --export-debug "Android" \
             dist/godot/circuit-bastion-android-arm64.apk
