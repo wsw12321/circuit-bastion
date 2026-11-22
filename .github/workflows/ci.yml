@@ -75,6 +75,7 @@ jobs:
       - name: Run Godot smoke checks
         run: |
           "$GODOT_BIN" --headless --path . --script scripts/godot_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/3d_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/simulation_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/qa_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/p1_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
@@ -117,6 +118,7 @@ jobs:
           PERF_BUDGET_MS: '10000'
         run: |
           "$GODOT_BIN" --headless --path . --script scripts/godot_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/3d_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/simulation_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/qa_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility

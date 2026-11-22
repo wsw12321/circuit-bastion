@@ -69,6 +69,7 @@ var result_transition_time := 0.0
 var previous_finished := false
 var previous_victory := false
 var ui_overlay: Node
+@export var use_3d_battlefield := true
 
 var modules: Array = [
 	{"id": "scanner", "name": "探针", "cell": Vector2i(1, 1), "color": Color("#5ed6ff"), "load": 0.22},
@@ -228,13 +229,26 @@ func highlight_event(event: Dictionary) -> void:
 
 func _draw() -> void:
 	var size := get_rect().size
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017"))
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#071017", 0.16 if use_3d_battlefield else 1.0))
 	_draw_top_bar(size)
-	_draw_battlefield(size)
+	if use_3d_battlefield:
+		_draw_battlefield_frame(size)
+	else:
+		_draw_battlefield(size)
 	_draw_right_panel(size)
 	_draw_bottom_bar(size)
 	_draw_result_banner(size)
 	_draw_fx_overlay(size)
+
+func _draw_battlefield_frame(size: Vector2) -> void:
+	var panel_reserve := 0.0 if _is_compact(size) else RIGHT_PANEL_WIDTH + MARGIN * 3.0
+	var area_width := maxf(180.0, size.x - panel_reserve)
+	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - _bottom_bar_height(size) - 40.0)
+	draw_rect(board, Color("#091923", 0.16), true)
+	draw_rect(board, Color("#1c3c4b", 0.72), false, 1.0)
+	draw_string(ThemeDB.fallback_font, board.position + Vector2(18, 26), "SECTOR 07 / 3D BATTLEFIELD", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#d7e8ed"))
+	draw_string(ThemeDB.fallback_font, board.position + Vector2(board.size.x - 164, 26), "CAMERA 45°", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#72d7ff"))
+	draw_string(ThemeDB.fallback_font, board.position + Vector2(18, board.size.y - 18), "拖动旋转 · 滚轮/双指缩放", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#6f929f"))
 
 
 func _draw_top_bar(size: Vector2) -> void:

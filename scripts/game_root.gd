@@ -1,11 +1,13 @@
-extends Node
+extends Node3D
 ## Thin composition root for the desktop vertical slice.
 ## It wires the deterministic simulation to the hand-drawn BattleView and keeps
 ## presentation free from game-state mutation.
 
 const SIMULATION_SCRIPT := preload("res://scripts/simulation.gd")
-const BATTLE_VIEW_SCRIPT := preload("res://godot/battle_view.gd")
+const DESKTOP_BATTLE_VIEW_SCRIPT := preload("res://godot/battle_view.gd")
+const MOBILE_BATTLE_VIEW_SCRIPT := preload("res://godot/mobile_battle_view.gd")
 const BATTLE_WORLD_SCRIPT := preload("res://gameplay/world/battle_world.gd")
+const BATTLEFIELD_3D_SCRIPT := preload("res://gameplay/world/battlefield_3d.gd")
 
 var simulation: RefCounted
 var view: Control
@@ -13,14 +15,24 @@ var view_events: Array[Dictionary] = []
 var pending_build_kind := ""
 var pending_bench_index := -1
 var world: Node2D
+var battlefield_3d: Node3D
+
+static func select_view_script(mobile: bool) -> Script:
+	return MOBILE_BATTLE_VIEW_SCRIPT if mobile else DESKTOP_BATTLE_VIEW_SCRIPT
 
 func _ready() -> void:
 	simulation = SIMULATION_SCRIPT.new(2048)
+	battlefield_3d = get_node_or_null("Battlefield3D")
+	if battlefield_3d == null:
+		battlefield_3d = BATTLEFIELD_3D_SCRIPT.new()
+		battlefield_3d.name = "Battlefield3D"
+		add_child(battlefield_3d)
+	battlefield_3d.setup(simulation)
 	world = BATTLE_WORLD_SCRIPT.new()
 	world.name = "BattleWorld"
 	add_child(world)
 	world.setup(simulation)
-	view = BATTLE_VIEW_SCRIPT.new()
+	view = select_view_script(OS.has_feature("mobile") or OS.has_feature("android")).new()
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(view)
 	view.set_simulation(simulation)
@@ -30,6 +42,7 @@ func _ready() -> void:
 	view.event_selected.connect(_on_event_selected)
 	_seed_modules()
 	world.sync_snapshot(simulation.get_snapshot())
+	battlefield_3d.sync_snapshot(simulation.get_snapshot())
 	simulation.start_battle()
 	world.sync_snapshot(simulation.get_snapshot())
 	_push_snapshot()
@@ -38,6 +51,7 @@ func _process(delta: float) -> void:
 	simulation.advance(delta)
 	world.sync_snapshot(simulation.get_snapshot())
 	world.step_world(delta)
+	battlefield_3d.sync_snapshot(simulation.get_snapshot())
 	_push_snapshot()
 
 func _on_event_recorded(event: Dictionary) -> void:
@@ -75,6 +89,7 @@ func _on_event_recorded(event: Dictionary) -> void:
 
 func _on_state_changed(_state: Dictionary) -> void:
 	world.sync_snapshot(_state)
+	battlefield_3d.sync_snapshot(_state)
 	_push_snapshot()
 
 func _on_event_selected(event_index: int) -> void:
@@ -137,6 +152,7 @@ func _on_command_requested(command: String) -> void:
 	elif command == "retry":
 		simulation.retry_battle()
 	world.sync_snapshot(simulation.get_snapshot())
+	battlefield_3d.sync_snapshot(simulation.get_snapshot())
 	_push_snapshot()
 
 func _push_snapshot() -> void:
