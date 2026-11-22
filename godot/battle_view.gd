@@ -51,6 +51,7 @@ var enemy_last_state: Dictionary = {}
 var enemy_hit_flash: Dictionary = {}
 var enemy_death_effects: Array = []
 var art_tick := -1
+var character_scale := 1.0
 var fx_items: Array = []
 @export_enum("cyan", "amber", "violet", "mono") var effect_theme_id := "cyan"
 @export var low_performance_effects := false
@@ -448,6 +449,16 @@ func _draw_enemies(origin: Vector2, cell_size: float) -> void:
 			{"id": "preview_splitter", "cell": Vector2i(5, 3), "progress": 0.66, "hp": 40.0, "max_hp": 52.0, "label": "裂变体", "kind": "splitter"},
 			{"id": "preview_boss", "cell": Vector2i(6, 3), "progress": 0.78, "hp": 410.0, "max_hp": 520.0, "label": "熔断主宰", "kind": "boss"},
 		]
+	enemy_list.sort_custom(_sort_enemy_draw_order)
+	for effect in enemy_death_effects:
+		var death_progress := clampf(float(effect.get("progress", 0.0)), 0.0, 0.99)
+		var death_center := _cell_center(origin, cell_size, Vector2i(int(death_progress * 7.0), 3)) + Vector2(0, -cell_size * 0.25)
+		var death_kind := str(effect.get("kind", "scout"))
+		var death_size := cell_size * (0.47 if death_kind == "boss" else 0.31) * character_scale
+		var max_ttl := maxf(0.01, float(effect.get("max_ttl", 1.0)))
+		var intensity := clampf(float(effect.get("ttl", 0.0)) / max_ttl, 0.0, 1.0)
+		CHARACTER_ART.draw_death_burst(self, death_center, death_size, death_kind, phase, intensity)
+		draw_string(font, death_center + Vector2(-death_size, death_size * 0.98), str(effect.get("label", "目标")) + " · OFFLINE", HORIZONTAL_ALIGNMENT_LEFT, death_size * 2.0, 8, Color(1.0, 0.83, 0.68, intensity))
 	for enemy in enemy_list:
 		var kind := str(enemy.get("kind", "scout"))
 		var center := _cell_center(origin, cell_size, enemy.get("cell", Vector2i.ZERO)) + Vector2(0, -cell_size * 0.25)
@@ -455,27 +466,36 @@ func _draw_enemies(origin: Vector2, cell_size: float) -> void:
 		var lane := 0.0 if not serial.is_valid_int() else float((int(serial) % 3) - 1) * cell_size * 0.11
 		center += Vector2(0, lane)
 		var is_boss := kind == "boss"
-		var art_size := cell_size * (0.47 if is_boss else 0.31)
+		var art_size := cell_size * (0.47 if is_boss else 0.31) * character_scale
 		var hit_intensity := float(enemy_hit_flash.get(str(enemy.get("id", "")), 0.0))
+		var art_color := CHARACTER_ART.palette(kind)
+		CHARACTER_ART.draw_ground_layer(self, center, art_size, kind, phase)
+		if is_boss:
+			var boss_pulse := 0.22 + 0.10 * (0.5 + 0.5 * sin(phase * 1.4))
+			draw_arc(center, art_size * 1.34, phase * 0.55, phase * 0.55 + 4.9, 32, Color(art_color, boss_pulse), 2.0)
+			draw_line(center + Vector2(-art_size * 0.78, art_size * 0.94), center + Vector2(-art_size * 0.58, art_size * 0.94), Color("#ffca62", 0.68), 2.0)
+			draw_line(center + Vector2(art_size * 0.58, art_size * 0.94), center + Vector2(art_size * 0.78, art_size * 0.94), Color("#ffca62", 0.68), 2.0)
+		elif hit_intensity > 0.0:
+			draw_arc(center, art_size * 0.92, -phase, -phase + 4.1, 22, Color(art_color, 0.26 * hit_intensity), 1.5)
 		CHARACTER_ART.draw_enemy(self, center, art_size, kind, "hit" if hit_intensity > 0.0 else "idle", phase, hit_intensity)
 		var hp_ratio := clampf(float(enemy.get("hp", 1.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0))), 0.0, 1.0)
-		var bar_width := 58.0 if is_boss else 34.0
-		var hp_rect := Rect2(center + Vector2(-bar_width * 0.5, art_size * 0.72), Vector2(bar_width, 4))
-		var art_color := CHARACTER_ART.palette(kind)
+		var width_scale := maxf(0.78, character_scale)
+		var bar_width := (58.0 if is_boss else 34.0) * width_scale
+		var hp_rect := Rect2(center + Vector2(-bar_width * 0.5, art_size * 0.72), Vector2(bar_width, 4.0 * width_scale))
 		draw_rect(hp_rect, Color("#311d27"), true)
 		draw_rect(Rect2(hp_rect.position, Vector2(hp_rect.size.x * hp_ratio, hp_rect.size.y)), art_color, true)
-		draw_string(font, center + Vector2(-bar_width * 0.5, -art_size * 0.78), str(enemy.get("label", "目标")), HORIZONTAL_ALIGNMENT_LEFT, bar_width, 9 if not is_boss else 10, Color("#e6f2f4") if is_boss else Color("#a8c0c8"))
+		var label_size := maxi(8, int(round((10 if is_boss else 9) * character_scale)))
+		draw_string(font, center + Vector2(-bar_width * 0.5, -art_size * 0.78), str(enemy.get("label", "目标")), HORIZONTAL_ALIGNMENT_LEFT, bar_width, label_size, Color("#e6f2f4") if is_boss else Color("#a8c0c8"))
 		if is_boss:
-			draw_string(font, center + Vector2(-bar_width * 0.5, art_size * 0.96), "BOSS  %02d%%" % int(hp_ratio * 100.0), HORIZONTAL_ALIGNMENT_LEFT, bar_width, 8, Color("#ffca62"))
-	for effect in enemy_death_effects:
-		var death_progress := clampf(float(effect.get("progress", 0.0)), 0.0, 0.99)
-		var death_center := _cell_center(origin, cell_size, Vector2i(int(death_progress * 7.0), 3)) + Vector2(0, -cell_size * 0.25)
-		var death_kind := str(effect.get("kind", "scout"))
-		var death_size := cell_size * (0.47 if death_kind == "boss" else 0.31)
-		var max_ttl := maxf(0.01, float(effect.get("max_ttl", 1.0)))
-		var intensity := clampf(float(effect.get("ttl", 0.0)) / max_ttl, 0.0, 1.0)
-		CHARACTER_ART.draw_death_burst(self, death_center, death_size, death_kind, phase, intensity)
-		draw_string(font, death_center + Vector2(-death_size, death_size * 0.98), str(effect.get("label", "目标")) + " · OFFLINE", HORIZONTAL_ALIGNMENT_LEFT, death_size * 2.0, 8, Color(1.0, 0.83, 0.68, intensity))
+			draw_string(font, center + Vector2(-bar_width * 0.5, art_size * 0.96), "BOSS  %02d%%" % int(hp_ratio * 100.0), HORIZONTAL_ALIGNMENT_LEFT, bar_width, maxi(8, label_size - 1), Color("#ffca62"))
+
+func _sort_enemy_draw_order(left: Dictionary, right: Dictionary) -> bool:
+	var left_progress := float(left.get("progress", 0.0))
+	var right_progress := float(right.get("progress", 0.0))
+	if is_equal_approx(left_progress, right_progress):
+		return str(left.get("kind", "")) == "boss"
+	return left_progress < right_progress
+
 
 func _infer_enemy_kind(label: String) -> String:
 	var labels := {
