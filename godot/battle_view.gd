@@ -86,6 +86,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	phase = fmod(phase + delta * (0.8 if not paused else 0.16), TAU)
 	route_flash = maxf(0.0, route_flash - delta * 1.7)
+	_update_fx(delta)
 	for enemy_id in enemy_hit_flash.keys():
 		var remaining := float(enemy_hit_flash[enemy_id]) - delta * 4.2
 		if remaining <= 0.0:
