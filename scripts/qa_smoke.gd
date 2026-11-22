@@ -15,7 +15,9 @@ func _run() -> void:
 		return
 	if not _test_wave_progression():
 		return
-	print("QA_SMOKE_OK determinism=pause-speed-wave")
+	if not _test_heat_disconnect_events():
+		return
+	print("QA_SMOKE_OK determinism=pause-speed-wave-effects")
 	quit(0)
 
 func _new_simulation(seed_value: int):
@@ -64,6 +66,31 @@ func _test_wave_progression() -> bool:
 		simulation.advance(0.1)
 	if simulation.current_wave < 2:
 		return _fail("simulation did not reach the second wave")
+	return true
+
+func _test_heat_disconnect_events() -> bool:
+	var simulation = _new_simulation(6060)
+	var cannon_id := ""
+	for module_id in simulation.modules.keys():
+		var module: Dictionary = simulation.modules[module_id]
+		if str(module.get("kind", "")) == "railgun":
+			cannon_id = str(module_id)
+			break
+	if cannon_id.is_empty():
+		return _fail("heat setup could not find railgun")
+	simulation.modules[cannon_id].heat_rate = 100
+	if not simulation.start_battle():
+		return _fail("heat setup could not start battle")
+	for _index in 80:
+		simulation.advance(0.1)
+	var saw_overheat := false
+	var saw_disconnect := false
+	for event in simulation.get_event_log():
+		var kind := str(event.get("kind", ""))
+		saw_overheat = saw_overheat or kind == "overheat"
+		saw_disconnect = saw_disconnect or kind == "disconnect"
+	if not saw_overheat or not saw_disconnect:
+		return _fail("overheat did not emit overheat and disconnect events")
 	return true
 
 func _fail(message: String) -> bool:
