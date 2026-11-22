@@ -311,7 +311,11 @@ func _draw_modules(origin: Vector2, cell_size: float) -> void:
 		var raw_color = module.get("color", Color("#72d7ff"))
 		var color: Color = raw_color if raw_color is Color else Color(str(raw_color))
 		var selected: bool = str(module.get("id", "")) == selected_module_id
+		var disabled := bool(module.get("disabled", false))
 		var radius := cell_size * 0.30
+		if disabled:
+			draw_circle(center, radius + 9.0, Color("#ff6b75", 0.10), true)
+			draw_arc(center, radius + 8.0, phase, phase + TAU * 0.86, 24, Color("#ff6b75", 0.85), 2.0)
 		if selected:
 			draw_circle(center, radius + 7.0, Color(color, 0.10))
 			draw_arc(center, radius + 7.0, phase, phase + 4.3, 24, Color(color, 0.7), 2.0)
