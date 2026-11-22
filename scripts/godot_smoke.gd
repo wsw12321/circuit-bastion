@@ -22,12 +22,14 @@ func _run() -> void:
 		_fail("composition root did not create the BattleView")
 		return
 	var battle_view_loaded := false
+	var battle_view_node: Node = null
 	var overlay_loaded := false
 	var battle_world_loaded := false
 	var camera_contract_loaded := false
 	for child: Node in instance.get_children():
 		if child.get_script() != null and child.get_script().resource_path == "res://godot/battle_view.gd":
 			battle_view_loaded = true
+			battle_view_node = child
 			for nested: Node in child.get_children():
 				if nested.get_script() != null and nested.get_script().resource_path == "res://godot/battle_ui_overlay.gd":
 					overlay_loaded = true
@@ -48,8 +50,12 @@ func _run() -> void:
 	if not camera_contract_loaded:
 		_fail("3D runtime camera orbit/zoom contract is missing")
 		return
+	if battle_view_node == null or not battle_view_node.has_method("set_battle_world") or not battle_view_node.has_method("_rotate_battle_camera") or not battle_view_node.has_method("_zoom_battle_camera"):
+		_fail("BattleView camera input wiring is missing")
+		return
+	var child_count := instance.get_child_count()
 	instance.free()
-	print("GODOT_SMOKE_OK children=2 root_script=res://scripts/game_root.gd battle_view=true overlay=true world_3d=true camera_orbit_zoom=true camera_input=true")
+	print("GODOT_SMOKE_OK children=%d root_script=res://scripts/game_root.gd battle_view=true overlay=true world_3d=true camera_orbit_zoom=true camera_input=true" % child_count)
 	quit(0)
 
 func _fail(message: String) -> void:
