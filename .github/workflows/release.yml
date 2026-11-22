@@ -220,6 +220,11 @@ jobs:
           "$GODOT_BIN" --headless --path . --script scripts/android_probe.gd \
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 
+      - name: Run native world physics contract
+        run: |
+          "$GODOT_BIN" --headless --path . --script scripts/world_physics_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+
       - name: Export Android arm64 debug APK
         shell: bash
         run: |
