@@ -108,7 +108,7 @@ func deploy_module_at_cell(module_kind: String, grid_position: Vector2i, rotatio
 
 func deploy_module(module_kind: String, world_position: Vector2, rotation := 0) -> String:
 	var preview := preview_deployment(module_kind, world_position, rotation)
-	var grid_position: Vector2i = preview.grid
+	var grid_position: Vector2i = _state_grid(preview)
 	if not bool(preview.get("valid", false)):
 		deployment_rejected.emit(module_kind, grid_position, str(preview.get("reason", "invalid")))
 		return ""
