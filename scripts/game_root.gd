@@ -169,6 +169,9 @@ func _view_modules() -> Array:
 			"cell": Vector2i(int(grid.get("x", 0)), int(grid.get("y", 0))),
 			"rotation": int(module.get("rotation", 0)), "level": int(module.get("level", 1)),
 			"color": palette.get(str(module.get("kind", "")), Color("#72d7ff")),
+			"heat": int(module.get("heat", 0)),
+			"heat_limit": limit,
+			"disabled": bool(module.get("disabled", false)),
 			"load": clampf(float(module.get("heat", 0)) / float(limit), 0.0, 1.0),
 		})
 	return result
