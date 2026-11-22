@@ -829,7 +829,7 @@ func _draw_button(rect: Rect2, label: String, command: String, color: Color) -> 
 func _gui_input(event: InputEvent) -> void:
 	camera_input_requested.emit(event)
 	if event is InputEventMouseMotion:
-		if event.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT):
+		if (event.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT)) != 0:
 			return
 		hover_cell = _cell_at(event.position)
 		if build_mode or not dragging_module_id.is_empty():
