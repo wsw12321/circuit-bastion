@@ -20,6 +20,15 @@ func _run() -> void:
 		if not preset_text.contains(required):
 			_fail("missing Android preset field: " + required)
 			return
+	var sdk_root := OS.get_environment("ANDROID_SDK_ROOT")
+	if not sdk_root.is_empty():
+		for required_path in [
+			"cmdline-tools", "platform-tools", "platforms/android-34",
+			"build-tools/34.0.0", "cmake/3.10.2.4988404", "ndk/23.2.8568313",
+		]:
+			if not DirAccess.dir_exists_absolute(sdk_root + "/" + required_path):
+				_fail("missing Android SDK package: " + required_path)
+				return
 	var view = BattleView.new()
 	if view == null or not view.has_method("_cell_at"):
 		_fail("touch-capable BattleView could not be instantiated")
