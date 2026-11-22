@@ -12,7 +12,7 @@ The Android preset targets arm64-v8a, landscape orientation, and package name co
 
 ## Touch layout
 
-Android boots MobileBattleView. The battlefield fills the upper area, while the lower action bar provides pause, speed, replay, and shop commands with touch-sized hit targets. Tapping a grid cell selects its module. Screen drags update the highlighted cell without mutating simulation state until the touch is released.
+Android boots MobileBattleView. The battlefield fills the upper area, while the lower action bar provides pause, speed, replay, and shop commands with touch-sized hit targets. Tapping a grid cell selects its module, single-finger drags orbit the 3D camera, and two-finger pinch gestures zoom it. A tap confirms a deployment without mutating simulation state during the drag.
 
 ## CI artifact
 
