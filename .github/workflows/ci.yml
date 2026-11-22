@@ -77,5 +77,8 @@ jobs:
           "$GODOT_BIN" --headless --path . --script scripts/godot_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/simulation_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/qa_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
-          "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/p1_smoke.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/layout_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/android_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility

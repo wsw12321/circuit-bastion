@@ -394,7 +394,7 @@ npm run check
 npm start
 ```
 
-推送 `v*` 标签后，GitHub Actions 会构建 Godot Linux x64 与 Windows x64 桌面包，同时构建 Windows x64、Linux x64 和可选 macOS 架构的 Node.js SEA 独立可执行文件，并上传一个不含 Node.js 的便携 Node 包作为 fallback。Godot 与 Node 资产会一起进入 GitHub Release，各平台下载包的运行方式记录在 [RUNNING.md](RUNNING.md) 中。
+推送 `v*` 标签后，GitHub Actions 会构建 Godot Linux x64 与 Windows x64 桌面包，并以独立可选任务构建 Android arm64 APK。Android 或 macOS runner 排队/失败不会阻塞 Linux、Windows、portable 与 SEA 主发布链路。Node.js SEA 独立可执行文件和不含 Node.js 的 portable 包继续作为 fallback，各平台下载包的运行方式记录在 [RUNNING.md](RUNNING.md) 中。
 
 ## 19. Godot 4 桌面垂直切片
 
@@ -420,7 +420,11 @@ godot4 --headless --path . --script scripts/simulation_probe.gd
 
 推送 `v*` 标签后，Release 会同时上传 `circuit-bastion-godot-linux-x64.zip` 和
 `circuit-bastion-godot-windows-x64.zip`。这些包包含可直接启动的 Godot 导出产物、
-README、RUNNING.md 和版本信息。Node.js SEA 与 portable 包继续作为兼容 fallback。
+README、RUNNING.md 和版本信息。Android job 成功时还会上传
+`circuit-bastion-android-arm64.apk`。这是 arm64 debug-signed APK，适合直接安装到
+Android 设备进行验收。Node.js SEA 与 portable 包继续作为兼容 fallback。
+
+Android 版本使用同一套确定性模拟和触控优先视图。点击商店模块进入部署模式，拖拽模块移动，长按或点选查看详情，双指缩放由 Godot 的 canvas stretch 处理。安装 APK 时只需要允许系统的“安装未知应用”权限，游戏本身不申请网络权限。
 
 仓库中的 Node.js 页面仍保留用于设计稿对照和发行包 fallback，桌面垂直切片是后续玩法实现的主技术方向。
 

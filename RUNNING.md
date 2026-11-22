@@ -70,3 +70,15 @@ Version tags publish two desktop archives alongside the Node fallback packages:
 
 Each archive includes `README.md`, this file, and `VERSION.txt`. The macOS SEA
 packages remain optional because hosted macOS runners can be queued independently.
+
+### Android arm64 APK
+
+Version tags also run an independent Android export job. When the hosted Android
+toolchain is available, the Release contains `circuit-bastion-android-arm64.apk`.
+Download it on an arm64 Android phone, allow installation from the browser or file
+manager when Android asks, and install the APK. The build is debug-signed for local
+验收 and does not request network access. Touch controls include tap-to-select,
+drag-to-move, long-press-friendly detail cards, and the same build, rotate, sell,
+shop, upgrade, pause, and retry actions as desktop. The Android job is optional, so
+desktop and portable release assets still publish if a mobile runner is queued or
+unavailable.

@@ -89,7 +89,15 @@ jobs:
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/qa_smoke.gd \
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/p1_smoke.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/layout_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/android_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/content_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd \
             --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 
       - name: Export Linux x64 Godot build
@@ -104,6 +112,107 @@ jobs:
           name: circuit-bastion-godot
           path: dist/godot/*.zip
           if-no-files-found: error
+
+  android_optional:
+    name: Godot Android arm64 APK (optional)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    continue-on-error: true
+    outputs:
+      ready: ${{ steps.android_ready.outputs.ready }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Install pinned Godot editor and Android export template
+        shell: bash
+        env:
+          GODOT_VERSION: 4.3
+          GODOT_RELEASE: 4.3-stable
+        run: |
+          set -euo pipefail
+          godot_root="$RUNNER_TEMP/godot"
+          template_root="$HOME/.local/share/godot/export_templates"
+          mkdir -p "$godot_root" "$template_root"
+          curl --fail --retry 3 --location \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" \
+            --output "$godot_root/editor.zip"
+          unzip -q "$godot_root/editor.zip" -d "$godot_root/editor"
+          mv "$godot_root/editor/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$godot_root/godot"
+          chmod +x "$godot_root/godot"
+          curl --fail --retry 3 --location \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" \
+            --output "$godot_root/templates.tpz"
+          unzip -q "$godot_root/templates.tpz" -d "$godot_root/templates"
+          template_source="$(find "$godot_root/templates" -type f -name 'android_release.apk' -printf '%h\n' | head -n 1)"
+          if [[ -z "$template_source" || ! -d "$template_source" ]]; then
+            echo "Godot Android export template directory was not found" >&2
+            find "$godot_root/templates" -maxdepth 4 -print >&2
+            exit 1
+          fi
+          template_version="${GODOT_VERSION}.stable"
+          if [[ -f "$template_source/version.txt" ]]; then
+            version_from_file="$(tr -d '\r\n' < "$template_source/version.txt")"
+            if [[ "$version_from_file" =~ ^[0-9]+\.[0-9]+\.stable$ ]]; then
+              template_version="$version_from_file"
+            fi
+          fi
+          template_destination="$template_root/$template_version"
+          mkdir -p "$template_destination"
+          cp -R "$template_source/." "$template_destination/"
+          test -f "$template_destination/android_release.apk"
+          echo "GODOT_BIN=$godot_root/godot" >> "$GITHUB_ENV"
+
+      - name: Run mobile contract smoke check
+        run: |
+          "$GODOT_BIN" --headless --path . --script scripts/platform_probe.gd \
+            --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+
+      - name: Export Android arm64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/godot
+          "$GODOT_BIN" --headless --path . --export-debug "Android" \
+            "dist/godot/circuit-bastion-android-arm64.apk"
+          test -s dist/godot/circuit-bastion-android-arm64.apk
+          unzip -t dist/godot/circuit-bastion-android-arm64.apk >/dev/null
+          unzip -l dist/godot/circuit-bastion-android-arm64.apk | grep -q 'lib/arm64-v8a/'
+          cp README.md RUNNING.md dist/godot/
+          printf 'Circuit Bastion Android arm64 debug APK\nVersion: %s\n' "$GITHUB_REF_NAME" > dist/godot/ANDROID-VERSION.txt
+
+      - name: Upload Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-bastion-android-arm64
+          path: |
+            dist/godot/circuit-bastion-android-arm64.apk
+            dist/godot/README.md
+            dist/godot/RUNNING.md
+            dist/godot/ANDROID-VERSION.txt
+          if-no-files-found: error
+
+      - name: Mark Android artifact ready
+        id: android_ready
+        if: success()
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
   sea-required:
     name: SEA ${{ matrix.platform }} ${{ matrix.arch }}
@@ -311,6 +420,24 @@ jobs:
               --title "Circuit Bastion ${GITHUB_REF_NAME}" \
               --generate-notes
           fi
+
+  publish_android:
+    needs: [publish, android_optional]
+    if: ${{ always() && needs.publish.result == 'success' && needs.android_optional.outputs.ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: circuit-bastion-android-arm64
+          path: release-assets/circuit-bastion-android-arm64
+
+      - name: Upload Android APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" release-assets/circuit-bastion-android-arm64/circuit-bastion-android-arm64.apk --clobber
 
   publish_arm64:
     needs: [publish, sea_arm64]

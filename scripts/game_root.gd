@@ -1,24 +1,23 @@
 extends Node
-## Thin composition root for the desktop and Android vertical slice.
-## It wires the deterministic simulation to the platform-specific BattleView
-## while keeping presentation free from game-state mutation.
+## Thin composition root for the desktop vertical slice.
+## It wires the deterministic simulation to the hand-drawn BattleView and keeps
+## presentation free from game-state mutation.
 
 const SIMULATION_SCRIPT := preload("res://scripts/simulation.gd")
 const BATTLE_VIEW_SCRIPT := preload("res://godot/battle_view.gd")
-const MOBILE_BATTLE_VIEW_SCRIPT := preload("res://godot/mobile_battle_view.gd")
 
 var simulation: RefCounted
 var view: Control
 var view_events: Array[Dictionary] = []
+var pending_build_kind := ""
+var pending_bench_index := -1
 
 func _ready() -> void:
 	simulation = SIMULATION_SCRIPT.new(2048)
-	var view_script: Script = BATTLE_VIEW_SCRIPT
-	if OS.has_feature("mobile"):
-		view_script = MOBILE_BATTLE_VIEW_SCRIPT
-	view = view_script.new()
+	view = BATTLE_VIEW_SCRIPT.new()
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(view)
+	view.set_simulation(simulation)
 	simulation.event_recorded.connect(_on_event_recorded)
 	simulation.state_changed.connect(_on_state_changed)
 	view.command_requested.connect(_on_command_requested)
@@ -58,19 +57,57 @@ func _on_event_selected(event_index: int) -> void:
 		view.highlight_event(view_events[event_index])
 
 func _on_command_requested(command: String) -> void:
-	match command:
-		"pause", "resume":
-			simulation.toggle_pause()
-		"replay":
-			view_events.push_front({"time": "REPLAY", "type": "SYSTEM", "text": "事件回放已锁定当前确定性记录", "color": Color("#b690ff")})
-		_:
-			if command.begins_with("shop:"):
-				var slot := int(command.trim_prefix("shop:"))
-				var names := ["滤波器", "缓存", "维修臂"]
-				view_events.push_front({"time": "SHOP", "type": "PREP", "text": "预览 %s · 需要暂停后部署" % names[clampi(slot, 0, names.size() - 1)], "color": Color("#b690ff")})
 	var parts := command.split(":")
-	if parts.size() == 2 and parts[0] == "speed":
+	if command == "pause" or command == "resume":
+		simulation.set_paused(command == "pause")
+	elif command == "replay":
+		view_events.push_front({"time": "REPLAY", "type": "SYSTEM", "text": "事件回放已锁定当前确定性记录", "color": Color("#b690ff")})
+	elif parts.size() == 2 and parts[0] == "speed":
 		simulation.set_speed(int(parts[1]))
+	elif parts.size() >= 5 and parts[0] == "build":
+		var build_kind := str(parts[1])
+		var build_cell := Vector2i(int(parts[2]), int(parts[3]))
+		var build_rotation := int(parts[4])
+		var build_id := ""
+		var bench_items: Array = simulation.get_bench()
+		for bench_index in range(bench_items.size() - 1, -1, -1):
+			if str(bench_items[bench_index].get("kind", "")) == build_kind:
+				build_id = str(simulation.deploy_bench_item(bench_index, build_cell, build_rotation))
+				break
+		if build_id.is_empty():
+			build_id = str(simulation.build_module(build_kind, build_cell, build_rotation))
+		pending_build_kind = "" if not build_id.is_empty() else pending_build_kind
+	elif parts.size() >= 4 and parts[0] == "move":
+		simulation.move_module(str(parts[1]), Vector2i(int(parts[2]), int(parts[3])))
+	elif parts.size() >= 3 and parts[0] == "rotate":
+		if simulation.has_method("set_module_rotation"):
+			simulation.set_module_rotation(str(parts[1]), int(parts[2]))
+		else:
+			simulation.rotate_module(str(parts[1]), int(parts[2]))
+	elif parts.size() == 2 and parts[0] == "sell":
+		simulation.sell_module(str(parts[1]))
+	elif parts.size() >= 2 and parts[0] == "shop":
+		if parts[1] == "buy" and parts.size() >= 3:
+			simulation.buy_shop_slot(int(parts[2]))
+		elif parts[1] == "refresh":
+			simulation.refresh_shop()
+		elif parts[1] == "select":
+			pending_build_kind = str(parts[3]) if parts.size() >= 4 else ""
+			if parts.size() >= 3:
+				var slot: int = int(parts[2])
+				view_events.push_front({"time": "SHOP", "type": "PREP", "text": "选择 %s · 点击网格部署" % pending_build_kind, "color": Color("#b690ff")})
+	elif parts.size() >= 2 and parts[0] == "bench":
+		if parts[1] == "deploy" and parts.size() >= 6:
+			simulation.deploy_bench_item(int(parts[2]), Vector2i(int(parts[3]), int(parts[4])), int(parts[5]))
+		elif parts[1] == "discard" and parts.size() >= 3:
+			simulation.discard_bench_item(int(parts[2]))
+	elif parts.size() == 2 and parts[0] == "upgrade":
+		var branch: String = str({"fortify": "stabilizer", "logic": "automation"}.get(parts[1], parts[1]))
+		var selected: String = _selected_module_id()
+		if not selected.is_empty():
+			simulation.upgrade_module(selected, str(branch))
+	elif command == "retry":
+		simulation.retry_battle()
 	_push_snapshot()
 
 func _push_snapshot() -> void:
@@ -80,6 +117,8 @@ func _push_snapshot() -> void:
 	state = simulation.get_snapshot()
 	state["events"] = view_events
 	state["modules"] = _view_modules()
+	state["shop"] = simulation.get_shop_inventory()
+	state["bench"] = simulation.get_bench()
 	view.set_snapshot(state)
 
 func _seed_modules() -> void:
@@ -95,10 +134,29 @@ func _seed_modules() -> void:
 	simulation.add_rule(pulse, "target_seen", "always", "fire")
 
 func _view_modules() -> Array:
-	return [
-		{"id": "scanner", "name": "扫描器", "cell": Vector2i(1, 1), "color": Color("#5ed6ff"), "load": 0.22},
-		{"id": "router", "name": "路由器", "cell": Vector2i(3, 2), "color": Color("#b690ff"), "load": 0.48},
-		{"id": "pulse_cannon", "name": "脉冲炮", "cell": Vector2i(5, 3), "color": Color("#ffca62"), "load": 0.73},
-		{"id": "cooler", "name": "散热器", "cell": Vector2i(6, 1), "color": Color("#68e3bf"), "load": 0.31},
-		{"id": "battery", "name": "电容", "cell": Vector2i(2, 4), "color": Color("#82aaff"), "load": 0.18},
-	]
+	var result: Array = []
+	var palette := {
+		"scanner": Color("#5ed6ff"), "router": Color("#b690ff"), "pulse_cannon": Color("#ffca62"),
+		"railgun": Color("#ff9b71"), "heat_sink": Color("#68e3bf"), "capacitor": Color("#82aaff"),
+		"slow_field": Color("#dc7dff"), "repair_arm": Color("#8ee7b8"),
+	}
+	var ids: Array = simulation.modules.keys()
+	ids.sort()
+	for module_id in ids:
+		var module: Dictionary = simulation.modules[module_id]
+		var grid: Dictionary = module.get("grid", {})
+		var limit := maxi(1, int(module.get("heat_limit", 100)))
+		result.append({
+			"id": module_id, "name": str(module.get("label", module.get("kind", "模块"))),
+			"kind": str(module.get("kind", "module")),
+			"cell": Vector2i(int(grid.get("x", 0)), int(grid.get("y", 0))),
+			"rotation": int(module.get("rotation", 0)), "level": int(module.get("level", 1)),
+			"color": palette.get(str(module.get("kind", "")), Color("#72d7ff")),
+			"load": clampf(float(module.get("heat", 0)) / float(limit), 0.0, 1.0),
+		})
+	return result
+
+func _selected_module_id() -> String:
+	if is_instance_valid(view):
+		return str(view.get("selected_module_id"))
+	return ""

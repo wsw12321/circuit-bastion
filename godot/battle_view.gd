@@ -9,6 +9,7 @@ signal module_selected(module_id: String)
 signal cell_selected(cell: Vector2i)
 signal command_requested(command: String)
 signal event_selected(event_index: int)
+signal interaction_feedback(message: String, tone: String)
 
 const GRID_COLUMNS := 8
 const GRID_ROWS := 6
@@ -30,6 +31,20 @@ var hover_cell := Vector2i(-1, -1)
 var last_tick := -1
 var route_flash := 0.0
 var route_flash_color := Color("#72d7ff")
+var build_mode := false
+var build_kind := "pulse_cannon"
+var build_rotation := 0
+var dragging_module_id := ""
+var drag_origin_cell := Vector2i(-1, -1)
+var preview_cell := Vector2i(-1, -1)
+var preview_valid := false
+var shop_revision := 1
+var shop_inventory: Array = []
+var bench_items: Array = []
+var selected_upgrade_branch := "overclock"
+var feedback_message := "就绪 · 点击商店模块开始部署"
+var feedback_tone := "info"
+var touch_pointer_id := -1
 
 var modules: Array = [
 	{"id": "scanner", "name": "探针", "cell": Vector2i(1, 1), "color": Color("#5ed6ff"), "load": 0.22},
@@ -48,6 +63,8 @@ var events: Array = [
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	focus_mode = Control.FOCUS_ALL
+	grab_focus()
 	set_process(true)
 	queue_redraw()
 
@@ -58,6 +75,14 @@ func _process(delta: float) -> void:
 	if simulation != null and simulation.has_method("get_snapshot"):
 		set_snapshot(simulation.get_snapshot())
 	queue_redraw()
+
+
+func _is_compact(size: Vector2) -> bool:
+	return size.x < 980.0 or size.x < size.y * 0.9
+
+
+func _bottom_bar_height(size: Vector2) -> float:
+	return 190.0 if _is_compact(size) else BOTTOM_BAR_HEIGHT
 
 
 func set_simulation(value: Object) -> void:
@@ -80,6 +105,16 @@ func set_snapshot(value: Dictionary) -> void:
 		modules = snapshot.modules
 	if snapshot.has("events") and snapshot.events is Array:
 		events = snapshot.events
+	if snapshot.has("shop_revision"):
+		shop_revision = int(snapshot.get("shop_revision", shop_revision))
+	elif snapshot.has("shop_refreshes"):
+		shop_revision = int(snapshot.get("shop_refreshes", 0)) + 1
+	if snapshot.has("phase"):
+		feedback_message = str(snapshot.get("phase", feedback_message))
+	if snapshot.has("shop") and snapshot.shop is Array:
+		shop_inventory = snapshot.shop.duplicate(true)
+	if snapshot.has("bench") and snapshot.bench is Array:
+		bench_items = snapshot.bench.duplicate(true)
 	queue_redraw()
 
 func highlight_event(event: Dictionary) -> void:
@@ -94,12 +129,19 @@ func _draw() -> void:
 	_draw_battlefield(size)
 	_draw_right_panel(size)
 	_draw_bottom_bar(size)
+	_draw_result_banner(size)
 
 
 func _draw_top_bar(size: Vector2) -> void:
 	draw_rect(Rect2(0, 0, size.x, TOP_BAR_HEIGHT), Color("#0b1822"))
 	draw_line(Vector2(0, TOP_BAR_HEIGHT - 1), Vector2(size.x, TOP_BAR_HEIGHT - 1), Color("#1d3b4b"), 1.0)
 	var font := ThemeDB.fallback_font
+	if _is_compact(size):
+		draw_string(font, Vector2(MARGIN, 28), "CIRCUIT BASTION", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#e9f4f7"))
+		draw_string(font, Vector2(MARGIN, 50), "WAVE %02d · %s" % [int(snapshot.get("wave", 1)), "暂停" if paused else "运行"], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#8daab4"))
+		draw_string(font, Vector2(size.x - 118, 28), "C %03d" % int(snapshot.get("charge", 128)), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#ffca62"))
+		draw_string(font, Vector2(size.x - 118, 50), "CORE %02d%%" % int(snapshot.get("integrity", 86)), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#68e3bf"))
+		return
 	draw_string(font, Vector2(MARGIN, 31), "CIRCUIT BASTION", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color("#e9f4f7"))
 	draw_string(font, Vector2(MARGIN, 53), "DETERMINISTIC DEFENSE SYSTEM // LOCAL BUILD", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#6a8a98"))
 	var status := "战斗已暂停" if paused else "战斗运行中"
@@ -107,6 +149,7 @@ func _draw_top_bar(size: Vector2) -> void:
 	draw_circle(Vector2(size.x - 326, 30), 5.0, status_color)
 	draw_string(font, Vector2(size.x - 310, 35), status, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, status_color)
 	draw_string(font, Vector2(size.x - 310, 54), "WAVE %02d / 10" % int(snapshot.get("wave", 3)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9fb8c1"))
+	draw_string(font, Vector2(size.x - 198, 54), str(snapshot.get("phase", "combat")).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#72d7ff"))
 	draw_string(font, Vector2(size.x - 130, 35), "电荷  %03d" % int(snapshot.get("charge", 128)), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#ffca62"))
 	draw_string(font, Vector2(size.x - 130, 54), "核心  %02d%%" % int(snapshot.get("integrity", 86)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#68e3bf"))
 	var wave_progress := clampf(float(snapshot.get("wave", 1)) / 10.0, 0.0, 1.0)
@@ -116,12 +159,13 @@ func _draw_top_bar(size: Vector2) -> void:
 
 
 func _draw_battlefield(size: Vector2) -> void:
-	var area_width := size.x - RIGHT_PANEL_WIDTH - MARGIN * 3.0
-	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - BOTTOM_BAR_HEIGHT - 40.0)
+	var panel_reserve := 0.0 if _is_compact(size) else RIGHT_PANEL_WIDTH + MARGIN * 3.0
+	var area_width := maxf(180.0, size.x - panel_reserve)
+	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - _bottom_bar_height(size) - 40.0)
 	draw_rect(board, Color("#091923"), true)
 	draw_rect(board, Color("#1c3c4b"), false, 1.0)
 	draw_rect(Rect2(board.position + Vector2(8, 8), board.size - Vector2(16, 16)), Color("#112b36"), false, 1.0)
-	var cell_size: float = minf((board.size.x - 40.0) / float(GRID_COLUMNS), (board.size.y - 72.0) / float(GRID_ROWS))
+	var cell_size: float = maxf(18.0, minf((board.size.x - 40.0) / float(GRID_COLUMNS), (board.size.y - 72.0) / float(GRID_ROWS)))
 	var grid_size := Vector2(cell_size * GRID_COLUMNS, cell_size * GRID_ROWS)
 	var origin := board.position + Vector2((board.size.x - grid_size.x) * 0.5, 44.0)
 	_draw_board_header(board)
@@ -131,10 +175,13 @@ func _draw_battlefield(size: Vector2) -> void:
 			var cell := Vector2i(column, row)
 			var rect := Rect2(origin + Vector2(column, row) * cell_size + Vector2(3, 3), Vector2(cell_size - 6, cell_size - 6))
 			var fill := Color("#0d222c") if cell != hover_cell else Color("#173745")
+			if (build_mode or not dragging_module_id.is_empty()) and cell == preview_cell:
+				fill = Color("#173e38") if preview_valid else Color("#40222b")
 			draw_rect(rect, fill, true)
 			draw_rect(rect, Color("#1b3b48"), false, 1.0)
 	_draw_board_markers(origin, cell_size)
 	_draw_modules(origin, cell_size)
+	_draw_build_preview(origin, cell_size)
 	_draw_enemies(origin, cell_size)
 	_draw_path_legend(board)
 
@@ -211,7 +258,7 @@ func _draw_packet(points: PackedVector2Array, progress: float, color: Color, rad
 func _draw_modules(origin: Vector2, cell_size: float) -> void:
 	var font := ThemeDB.fallback_font
 	for module in modules:
-		var cell: Vector2i = module.get("cell", Vector2i.ZERO)
+		var cell: Vector2i = _module_cell(module)
 		var center := _cell_center(origin, cell_size, cell)
 		var raw_color = module.get("color", Color("#72d7ff"))
 		var color: Color = raw_color if raw_color is Color else Color(str(raw_color))
@@ -230,11 +277,32 @@ func _draw_modules(origin: Vector2, cell_size: float) -> void:
 			var socket := center + Vector2(cos(socket_angle), sin(socket_angle)) * (radius + 2.0)
 			draw_circle(socket, 3.0, Color("#071017"), true)
 			draw_circle(socket, 2.0, color, true)
-		draw_string(font, center + Vector2(-radius, radius + 18), str(module.get("name", "模块")), HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, 11, Color("#c5dbe2"))
+		draw_string(font, center + Vector2(-radius, radius + 18), str(module.get("name", module.get("label", "模块"))), HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, 11, Color("#c5dbe2"))
 		var load: float = float(module.get("load", 0.2))
 		var bar := Rect2(center + Vector2(-radius, radius + 25), Vector2(radius * 2.0, 4))
 		draw_rect(bar, Color("#18313c"), true)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * clamp(load, 0.0, 1.0), bar.size.y)), color, true)
+
+
+func _draw_build_preview(origin: Vector2, cell_size: float) -> void:
+	var cell := preview_cell if preview_cell.x >= 0 else hover_cell
+	if not build_mode and dragging_module_id.is_empty():
+		return
+	if cell.x < 0:
+		return
+	var center := _cell_center(origin, cell_size, cell)
+	var color := Color("#68e3bf") if preview_valid else Color("#ff6b75")
+	var radius := cell_size * 0.30
+	draw_circle(center, radius + 10.0, Color(color, 0.10), true)
+	draw_arc(center, radius + 8.0, -phase, -phase + TAU, 28, color, 2.0)
+	draw_circle(center, radius, Color(color, 0.10), true)
+	draw_circle(center, radius, color, false, 2.0)
+	for socket_index in range(4):
+		var socket_angle := float(socket_index) * TAU / 4.0 + PI / 4.0 + float(build_rotation) * PI / 2.0
+		var socket := center + Vector2(cos(socket_angle), sin(socket_angle)) * (radius + 2.0)
+		draw_circle(socket, 3.0, color, true)
+	var label := "可部署" if preview_valid else "位置冲突"
+	draw_string(ThemeDB.fallback_font, center + Vector2(-34, radius + 25), label, HORIZONTAL_ALIGNMENT_CENTER, 68, 10, color)
 
 
 func _draw_enemies(origin: Vector2, cell_size: float) -> void:
@@ -282,9 +350,12 @@ func _draw_legend_item(x: float, y: float, color: Color, label: String) -> void:
 
 
 func _draw_right_panel(size: Vector2) -> void:
+	if _is_compact(size):
+		_draw_compact_panel(size)
+		return
 	var x := size.x - RIGHT_PANEL_WIDTH - MARGIN
 	var top := TOP_BAR_HEIGHT + 20.0
-	var panel := Rect2(x, top, RIGHT_PANEL_WIDTH, size.y - TOP_BAR_HEIGHT - BOTTOM_BAR_HEIGHT - 40.0)
+	var panel := Rect2(x, top, RIGHT_PANEL_WIDTH, maxf(220.0, size.y - TOP_BAR_HEIGHT - _bottom_bar_height(size) - 40.0))
 	draw_rect(panel, Color("#0b1a23"), true)
 	draw_rect(panel, Color("#1d3b4b"), false, 1.0)
 	var font := ThemeDB.fallback_font
@@ -302,6 +373,10 @@ func _draw_right_panel(size: Vector2) -> void:
 	draw_string(font, card.position + Vector2(56, 32), selected_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f2d18a"))
 	draw_string(font, card.position + Vector2(56, 53), "执行模块 · Tier 02", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#86a5af"))
 	draw_string(font, card.position + Vector2(56, 70), "功率  4.2 kW     延迟  80 ms", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#a8c0c8"))
+	var sell_rect := Rect2(card.position + Vector2(card.size.x - 74, 12), Vector2(58, 24))
+	draw_rect(sell_rect, Color("#ff6b75", 0.12), true)
+	draw_rect(sell_rect, Color("#ff6b75", 0.55), false, 1.0)
+	draw_string(font, sell_rect.position + Vector2(0, 16), "出售", HORIZONTAL_ALIGNMENT_CENTER, sell_rect.size.x, 10, Color("#ff9aa1"))
 	draw_string(font, panel.position + Vector2(18, 182), "端口", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#8eb0bb"))
 	_draw_port(panel.position + Vector2(18, 202), "IN / SIGNAL", Color("#42c7ee"), "路由器 · 12 events/s")
 	_draw_port(panel.position + Vector2(18, 232), "OUT / TARGET", Color("#ffca62"), "输出节点 · 1.0×")
@@ -313,7 +388,40 @@ func _draw_right_panel(size: Vector2) -> void:
 	_draw_meter(panel.position + Vector2(18, 448), "电荷储备", float(snapshot.get("charge", 128)) / 200.0, Color("#ffca62"), "%03d" % int(snapshot.get("charge", 128)))
 	_draw_meter(panel.position + Vector2(18, 475), "线路带宽", 0.64, Color("#72d7ff"), "64%")
 	_draw_meter(panel.position + Vector2(18, 502), "热交换", 0.31, Color("#ff6b75"), "31°")
+	_draw_upgrade_branches(panel)
 	_draw_event_log(panel)
+
+
+func _draw_compact_panel(size: Vector2) -> void:
+	var rect := Rect2(MARGIN, size.y - _bottom_bar_height(size) - 86.0, size.x - MARGIN * 2.0, 62.0)
+	draw_rect(rect, Color("#0b1a23", 0.94), true)
+	draw_rect(rect, Color("#1d3b4b"), false, 1.0)
+	var selected_name := "模块"
+	for module in modules:
+		if str(module.get("id", "")) == selected_module_id:
+			selected_name = str(module.get("name", selected_name))
+	draw_string(ThemeDB.fallback_font, rect.position + Vector2(12, 21), "选中  " + selected_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f2d18a"))
+	draw_string(ThemeDB.fallback_font, rect.position + Vector2(12, 42), "长按详情 · 拖拽移动 · R 旋转 · 点击出售", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#8daab4"))
+	draw_string(ThemeDB.fallback_font, rect.position + Vector2(rect.size.x - 88, 21), "诊断 %02d" % int(snapshot.get("diagnostics", {}).get("warning_count", 0)), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#ffca62"))
+
+
+func _draw_upgrade_branches(panel: Rect2) -> void:
+	var font := ThemeDB.fallback_font
+	var y := panel.position.y + 530.0
+	draw_string(font, Vector2(panel.position.x + 18, y), "编译台升级分支", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#8eb0bb"))
+	var branches := [
+		{"id": "overclock", "label": "超频", "cost": "40 C", "color": Color("#ffca62")},
+		{"id": "fortify", "label": "固件", "cost": "36 C", "color": Color("#68e3bf")},
+		{"id": "logic", "label": "逻辑", "cost": "28 C", "color": Color("#b690ff")},
+	]
+	for index in range(branches.size()):
+		var branch: Dictionary = branches[index]
+		var rect := Rect2(panel.position + Vector2(14 + index * 98, y + 10), Vector2(90, 34))
+		var active := str(branch.id) == selected_upgrade_branch
+		draw_rect(rect, Color(branch.color, 0.18 if active else 0.07), true)
+		draw_rect(rect, branch.color if active else Color("#264653"), false, 1.0)
+		draw_string(font, rect.position + Vector2(8, 15), str(branch.label), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, branch.color)
+		draw_string(font, rect.position + Vector2(8, 28), str(branch.cost), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#a8c0c8"))
 
 
 func _draw_port(position: Vector2, label: String, color: Color, value: String) -> void:
@@ -344,10 +452,10 @@ func _draw_meter(position: Vector2, label: String, value: float, color: Color, v
 
 func _draw_event_log(panel: Rect2) -> void:
 	var font := ThemeDB.fallback_font
-	var y := panel.position.y + panel.size.y - 192.0
+	var y := panel.position.y + panel.size.y - 112.0
 	draw_string(font, Vector2(panel.position.x + 18, y), "事件追踪", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#8eb0bb"))
 	draw_string(font, Vector2(panel.position.x + panel.size.x - 100, y), "%02d EVENTS" % events.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#60818c"))
-	for index in range(min(events.size(), 4)):
+	for index in range(min(events.size(), 3)):
 		var event: Dictionary = events[index]
 		var row := Rect2(Vector2(panel.position.x + 14, y + 12 + index * 34), Vector2(panel.size.x - 28, 28))
 		if index == highlighted_event:
@@ -361,24 +469,60 @@ func _draw_event_log(panel: Rect2) -> void:
 
 
 func _draw_bottom_bar(size: Vector2) -> void:
-	var y := size.y - BOTTOM_BAR_HEIGHT
-	draw_rect(Rect2(0, y, size.x, BOTTOM_BAR_HEIGHT), Color("#0b1822"), true)
+	var bottom_height := _bottom_bar_height(size)
+	var y := size.y - bottom_height
+	draw_rect(Rect2(0, y, size.x, bottom_height), Color("#0b1822"), true)
 	draw_line(Vector2(0, y), Vector2(size.x, y), Color("#1d3b4b"), 1.0)
 	_draw_button(Rect2(MARGIN, y + 20, 118, 38), "暂停" if not paused else "继续", "pause", Color("#ffca62"))
 	_draw_button(Rect2(MARGIN + 128, y + 20, 80, 38), "%d×" % speed, "speed", Color("#72d7ff"))
 	_draw_button(Rect2(MARGIN + 218, y + 20, 118, 38), "事件回放", "replay", Color("#b690ff"))
+	if bool(snapshot.get("finished", false)):
+		_draw_button(Rect2(MARGIN + 346, y + 20, 44, 38), "重试", "retry", Color("#ff6b75"))
 	_draw_shop_slots(y)
+	_draw_bench_strip(y)
+	var status_color := Color("#68e3bf") if feedback_tone == "ok" else Color("#ffca62") if feedback_tone == "warn" else Color("#6b8d98")
+	draw_string(ThemeDB.fallback_font, Vector2(size.x - 440, y + 25), feedback_message, HORIZONTAL_ALIGNMENT_LEFT, 420, 10, status_color)
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 290, y + 43), "确定性种子  CB-07-1842", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#6b8d98"))
+
+
+func _draw_result_banner(size: Vector2) -> void:
+	if not bool(snapshot.get("finished", false)):
+		return
+	var victory_state := bool(snapshot.get("victory", false))
+	var color := Color("#68e3bf") if victory_state else Color("#ff6b75")
+	var width := minf(520.0, size.x * 0.52)
+	var rect := Rect2(Vector2((size.x - width) * 0.5, TOP_BAR_HEIGHT + 42.0), Vector2(width, 56.0))
+	draw_rect(rect, Color("#0b1822", 0.94), true)
+	draw_rect(rect, color, false, 1.0)
+	var title := "堡垒完成 · 10 波已守住" if victory_state else "核心失守 · 需要重新编译"
+	draw_string(ThemeDB.fallback_font, rect.position + Vector2(18, 24), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, color)
+	draw_string(ThemeDB.fallback_font, rect.position + Vector2(18, 43), "点击底部「重试」保留确定性种子，重新测试你的线路", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#b4cbd2"))
 
 
 func _draw_shop_slots(y: float) -> void:
 	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(390, y + 19), "备战商店", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#60818c"))
-	var shop := [
-		{"name": "滤波器", "type": "逻辑", "cost": "18 C", "color": Color("#b690ff")},
-		{"name": "缓存", "type": "中继", "cost": "24 C", "color": Color("#72d7ff")},
-		{"name": "维修臂", "type": "执行", "cost": "32 C", "color": Color("#68e3bf")},
-	]
+	if _is_compact(get_rect().size):
+		var size := get_rect().size
+		var start_x := 16.0
+		var refresh_width := 60.0
+		var gap := 4.0
+		var item_width := maxf(70.0, (size.x - start_x * 2.0 - refresh_width - gap * 3.0) / 3.0)
+		draw_string(font, Vector2(start_x, y + 54), "备战商店 / R%02d" % shop_revision, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#60818c"))
+		var shop := _display_shop_items()
+		for index in range(shop.size()):
+			var item: Dictionary = shop[index]
+			var rect := Rect2(start_x + index * (item_width + gap), y + 66, item_width, 48)
+			draw_rect(rect, Color("#0e222d"), true)
+			draw_rect(rect, Color(item.color, 0.55), false, 1.0)
+			draw_string(font, rect.position + Vector2(7, 18), item.name, HORIZONTAL_ALIGNMENT_LEFT, item_width - 12, 10, Color("#d8e7ea"))
+			draw_string(font, rect.position + Vector2(7, 34), item.cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, item.color)
+		var refresh_rect := Rect2(size.x - start_x - refresh_width, y + 66, refresh_width, 48)
+		draw_rect(refresh_rect, Color("#0e222d"), true)
+		draw_rect(refresh_rect, Color("#72d7ff", 0.65), false, 1.0)
+		draw_string(font, refresh_rect.position + Vector2(0, 21), "刷新", HORIZONTAL_ALIGNMENT_CENTER, refresh_width, 10, Color("#72d7ff"))
+		return
+	draw_string(font, Vector2(390, y + 19), "备战商店  /  R%02d" % shop_revision, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#60818c"))
+	var shop := _display_shop_items()
 	for index in range(shop.size()):
 		var item: Dictionary = shop[index]
 		var rect := Rect2(390 + index * 108, y + 25, 98, 45)
@@ -388,6 +532,56 @@ func _draw_shop_slots(y: float) -> void:
 		draw_string(font, rect.position + Vector2(27, 18), item.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#d8e7ea"))
 		draw_string(font, rect.position + Vector2(27, 33), item.type, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("#72919b"))
 		draw_string(font, rect.position + Vector2(64, 33), item.cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, item.color)
+	var refresh := Rect2(714, y + 25, 72, 45)
+	draw_rect(refresh, Color("#0e222d"), true)
+	draw_rect(refresh, Color("#72d7ff", 0.65), false, 1.0)
+	draw_string(font, refresh.position + Vector2(0, 19), "刷新", HORIZONTAL_ALIGNMENT_CENTER, refresh.size.x, 10, Color("#72d7ff"))
+	draw_string(font, refresh.position + Vector2(0, 34), "8 C", HORIZONTAL_ALIGNMENT_CENTER, refresh.size.x, 8, Color("#7697a4"))
+
+
+func _display_shop_items() -> Array:
+	if shop_inventory.is_empty():
+		return [
+			{"name": "滤波器", "type": "逻辑", "cost": "18 C", "kind": "slow_field", "color": Color("#b690ff")},
+			{"name": "缓存", "type": "中继", "cost": "24 C", "kind": "router", "color": Color("#72d7ff")},
+			{"name": "维修臂", "type": "执行", "cost": "32 C", "kind": "repair_arm", "color": Color("#68e3bf")},
+		]
+	var result: Array = []
+	var palette := [Color("#b690ff"), Color("#72d7ff"), Color("#68e3bf"), Color("#ffca62")]
+	for index in range(mini(3, shop_inventory.size())):
+		var item: Dictionary = shop_inventory[index]
+		result.append({
+			"name": str(item.get("label", item.get("kind", "模块"))),
+			"type": str(item.get("role", "模块")),
+			"cost": "%d C" % int(item.get("cost", 0)),
+			"kind": str(item.get("kind", "pulse_cannon")),
+			"color": palette[index % palette.size()],
+		})
+	return result
+
+
+func _draw_bench_strip(y: float) -> void:
+	var font := ThemeDB.fallback_font
+	if _is_compact(get_rect().size):
+		draw_string(font, Vector2(16, y + 135), "备战栏  %02d / 08" % bench_items.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#60818c"))
+		for index in range(mini(3, bench_items.size())):
+			var item: Dictionary = bench_items[index]
+			var rect := Rect2(120 + index * 88, y + 122, 82, 38)
+			draw_rect(rect, Color("#0e222d"), true)
+			draw_rect(rect, Color("#68e3bf"), false, 1.0)
+			draw_string(font, rect.position + Vector2(5, 16), str(item.get("label", item.get("kind", "模块"))), HORIZONTAL_ALIGNMENT_LEFT, 72, 9, Color("#d8e7ea"))
+			draw_string(font, rect.position + Vector2(5, 30), "点击部署", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("#68e3bf"))
+		return
+	var x := 800.0
+	draw_string(font, Vector2(x, y + 19), "备战栏  %02d / 08" % bench_items.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#60818c"))
+	for index in range(mini(3, bench_items.size())):
+		var item: Dictionary = bench_items[index]
+		var rect := Rect2(x + index * 72, y + 25, 64, 45)
+		var active := build_mode and build_kind == str(item.get("kind", ""))
+		draw_rect(rect, Color("#162d35") if active else Color("#0e222d"), true)
+		draw_rect(rect, Color("#68e3bf") if active else Color("#264653"), false, 1.0)
+		draw_string(font, rect.position + Vector2(5, 19), str(item.get("label", item.get("kind", "模块"))), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 10, 9, Color("#d8e7ea"))
+		draw_string(font, rect.position + Vector2(5, 34), "点击部署", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("#68e3bf"))
 
 
 func _draw_button(rect: Rect2, label: String, command: String, color: Color) -> void:
@@ -400,15 +594,73 @@ func _draw_button(rect: Rect2, label: String, command: String, color: Color) -> 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		hover_cell = _cell_at(event.position)
+		if build_mode or not dragging_module_id.is_empty():
+			preview_cell = hover_cell
+			preview_valid = _cell_is_valid(preview_cell, dragging_module_id)
 		queue_redraw()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		_handle_click(event.position)
+	elif event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				_pointer_press(event.position)
+			else:
+				_pointer_release(event.position)
+		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			_cancel_interaction("已取消部署")
+	elif event is InputEventScreenTouch:
+		if event.pressed:
+			touch_pointer_id = event.index
+			_pointer_press(event.position)
+		else:
+			if touch_pointer_id == event.index:
+				_pointer_release(event.position)
+				touch_pointer_id = -1
+	elif event is InputEventScreenDrag and event.index == touch_pointer_id:
+		hover_cell = _cell_at(event.position)
+		preview_cell = hover_cell
+		preview_valid = _cell_is_valid(preview_cell, dragging_module_id)
+		queue_redraw()
+	elif event is InputEventKey and event.pressed and not event.echo:
+		_handle_key(event)
 
 
-func _handle_click(position: Vector2) -> void:
+func _pointer_press(position: Vector2) -> void:
 	var size := get_rect().size
-	var bottom_y := size.y - BOTTOM_BAR_HEIGHT
+	var bottom_y := size.y - _bottom_bar_height(size)
 	if position.y >= bottom_y:
+		if _is_compact(size):
+			if Rect2(MARGIN, bottom_y + 20, 118, 38).has_point(position):
+				paused = not paused
+				command_requested.emit("pause" if paused else "resume")
+			elif Rect2(MARGIN + 128, bottom_y + 20, 80, 38).has_point(position):
+				speed = 1 if speed >= 4 else speed * 2
+				command_requested.emit("speed:%d" % speed)
+			elif Rect2(MARGIN + 218, bottom_y + 20, 118, 38).has_point(position):
+				command_requested.emit("replay")
+			elif Rect2(size.x - 76, bottom_y + 66, 60, 48).has_point(position):
+				shop_revision += 1
+				command_requested.emit("shop:refresh:%d" % shop_revision)
+			else:
+				var gap := 4.0
+				var item_width := maxf(70.0, (size.x - 32.0 - 60.0 - gap * 3.0) / 3.0)
+				for index in range(3):
+					var shop_rect := Rect2(16.0 + index * (item_width + gap), bottom_y + 66, item_width, 48)
+					if shop_rect.has_point(position):
+						var display_items := _display_shop_items()
+						if index < display_items.size():
+							build_kind = str(display_items[index].get("kind", "pulse_cannon"))
+							build_mode = true
+							command_requested.emit("shop:buy:%d" % index)
+							command_requested.emit("shop:select:%d:%s" % [index, build_kind])
+						break
+				for index in range(mini(3, bench_items.size())):
+					var bench_rect := Rect2(120 + index * 88, bottom_y + 122, 82, 38)
+					if bench_rect.has_point(position):
+						build_kind = str(bench_items[index].get("kind", "pulse_cannon"))
+						build_mode = true
+						command_requested.emit("bench:select:%d" % index)
+						break
+			queue_redraw()
+			return
 		if Rect2(MARGIN, bottom_y + 20, 118, 38).has_point(position):
 			paused = not paused
 			command_requested.emit("pause" if paused else "resume")
@@ -417,9 +669,51 @@ func _handle_click(position: Vector2) -> void:
 			command_requested.emit("speed:%d" % speed)
 		elif Rect2(MARGIN + 218, bottom_y + 20, 118, 38).has_point(position):
 			command_requested.emit("replay")
+		elif Rect2(MARGIN + 346, bottom_y + 20, 44, 38).has_point(position) and bool(snapshot.get("finished", false)):
+			command_requested.emit("retry")
+			feedback_message = "正在重启模拟 · 固定种子保持不变"
+			feedback_tone = "ok"
+		elif Rect2(714, bottom_y + 25, 72, 45).has_point(position):
+			shop_revision += 1
+			feedback_message = "商店刷新 · 轮次 R%02d" % shop_revision
+			feedback_tone = "ok"
+			command_requested.emit("shop:refresh:%d" % shop_revision)
+		elif position.x >= 800 and position.x < 1016 and not bench_items.is_empty():
+			var bench_slot := clampi(int((position.x - 800.0) / 72.0), 0, bench_items.size() - 1)
+			var bench_item: Dictionary = bench_items[bench_slot]
+			build_kind = str(bench_item.get("kind", "pulse_cannon"))
+			build_mode = true
+			preview_cell = hover_cell
+			preview_valid = _cell_is_valid(preview_cell)
+			feedback_message = "备战栏 · 部署 %s" % str(bench_item.get("label", build_kind))
+			feedback_tone = "info"
+			command_requested.emit("bench:select:%d" % bench_slot)
 		elif position.x >= 390 and position.x < 714:
 			var slot := clampi(int((position.x - 390.0) / 108.0), 0, 2)
-			command_requested.emit("shop:%d" % slot)
+			var display_items := _display_shop_items()
+			build_kind = str(display_items[slot].get("kind", "pulse_cannon")) if slot < display_items.size() else "pulse_cannon"
+			build_mode = true
+			preview_cell = hover_cell
+			preview_valid = _cell_is_valid(preview_cell)
+			feedback_message = "部署 %s · 点击网格确认 · R 旋转" % str(display_items[slot].get("name", build_kind)) if slot < display_items.size() else "部署模块 · 点击网格确认 · R 旋转"
+			feedback_tone = "info"
+			command_requested.emit("shop:buy:%d" % slot)
+			command_requested.emit("shop:select:%d:%s" % [slot, build_kind])
+		queue_redraw()
+		return
+	if _panel_sell_rect(size).has_point(position):
+		if not selected_module_id.is_empty():
+			command_requested.emit("sell:%s" % selected_module_id)
+			feedback_message = "已提交出售 · %s" % selected_module_id
+			feedback_tone = "warn"
+		queue_redraw()
+		return
+	var branch := _upgrade_branch_at(position, size)
+	if not branch.is_empty():
+		selected_upgrade_branch = branch
+		feedback_message = "编译台 · %s 分支已选中" % branch
+		feedback_tone = "ok"
+		command_requested.emit("upgrade:%s" % branch)
 		queue_redraw()
 		return
 	var event_index := _event_at(position, size)
@@ -430,20 +724,141 @@ func _handle_click(position: Vector2) -> void:
 		return
 	var cell := _cell_at(position)
 	if cell.x >= 0:
+		hover_cell = cell
+		preview_cell = cell
+		if build_mode:
+			preview_valid = _cell_is_valid(cell)
+			if preview_valid:
+				command_requested.emit("build:%s:%d:%d:%d" % [build_kind, cell.x, cell.y, build_rotation])
+				feedback_message = "已部署 %s · 等待连接" % build_kind
+				feedback_tone = "ok"
+				build_mode = false
+			else:
+				feedback_message = "位置冲突 · 请选择空闲网格"
+				feedback_tone = "warn"
+			queue_redraw()
+			return
 		selected_cell = cell
-		for module in modules:
-			if module.get("cell", Vector2i(-1, -1)) == cell:
-				selected_module_id = str(module.get("id", selected_module_id))
-				module_selected.emit(selected_module_id)
+		var module_id := _module_at_cell(cell)
+		if not module_id.is_empty():
+			selected_module_id = module_id
+			module_selected.emit(selected_module_id)
+			dragging_module_id = module_id
+			drag_origin_cell = cell
+			preview_valid = true
 		cell_selected.emit(cell)
 		queue_redraw()
 
 
+func _pointer_release(position: Vector2) -> void:
+	if dragging_module_id.is_empty():
+		return
+	var target := _cell_at(position)
+	if target.x >= 0 and target != drag_origin_cell and _cell_is_valid(target, dragging_module_id):
+		command_requested.emit("move:%s:%d:%d" % [dragging_module_id, target.x, target.y])
+		feedback_message = "移动 %s → [%d,%d]" % [dragging_module_id, target.x, target.y]
+		feedback_tone = "ok"
+	elif target != drag_origin_cell:
+		feedback_message = "移动被阻止 · 目标网格不可用"
+		feedback_tone = "warn"
+	dragging_module_id = ""
+	drag_origin_cell = Vector2i(-1, -1)
+	preview_cell = target
+	preview_valid = _cell_is_valid(target)
+	queue_redraw()
+
+
+func _cancel_interaction(message: String) -> void:
+	build_mode = false
+	dragging_module_id = ""
+	drag_origin_cell = Vector2i(-1, -1)
+	preview_cell = Vector2i(-1, -1)
+	feedback_message = message
+	feedback_tone = "info"
+	queue_redraw()
+
+
+func _handle_key(event: InputEventKey) -> void:
+	match event.keycode:
+		KEY_ESCAPE:
+			_cancel_interaction("已取消部署")
+		KEY_R:
+			build_rotation = (build_rotation + 1) % 4
+			if not selected_module_id.is_empty():
+				command_requested.emit("rotate:%s:%d" % [selected_module_id, build_rotation])
+			feedback_message = "端口旋转 · %d°" % (build_rotation * 90)
+			feedback_tone = "ok"
+			queue_redraw()
+		KEY_B:
+			build_mode = not build_mode
+			feedback_message = "建造模式已开启" if build_mode else "建造模式已关闭"
+			feedback_tone = "info"
+			queue_redraw()
+		KEY_DELETE, KEY_BACKSPACE:
+			if not selected_module_id.is_empty():
+				command_requested.emit("sell:%s" % selected_module_id)
+				feedback_message = "已提交出售 · %s" % selected_module_id
+				feedback_tone = "warn"
+				queue_redraw()
+
+
+func _panel_sell_rect(size: Vector2) -> Rect2:
+	if _is_compact(size):
+		return Rect2()
+	var panel_x := size.x - RIGHT_PANEL_WIDTH - MARGIN
+	var panel_top := TOP_BAR_HEIGHT + 20.0
+	return Rect2(panel_x + 16 + RIGHT_PANEL_WIDTH - 32 - 74, panel_top + 68 + 12, 58, 24)
+
+
+func _upgrade_branch_at(position: Vector2, size: Vector2) -> String:
+	if _is_compact(size):
+		return ""
+	var panel_x := size.x - RIGHT_PANEL_WIDTH - MARGIN
+	var panel_top := TOP_BAR_HEIGHT + 20.0
+	var y := panel_top + 530.0 + 10.0
+	var ids := ["overclock", "fortify", "logic"]
+	for index in range(ids.size()):
+		var rect := Rect2(panel_x + 14 + index * 98, y, 90, 34)
+		if rect.has_point(position):
+			return ids[index]
+	return ""
+
+
+func _module_at_cell(cell: Vector2i) -> String:
+	for module in modules:
+		if _module_cell(module) == cell:
+			return str(module.get("id", ""))
+	return ""
+
+
+func _module_cell(module: Dictionary) -> Vector2i:
+	var value = module.get("cell", null)
+	if value is Vector2i:
+		return value
+	var grid = module.get("grid", {})
+	if grid is Dictionary:
+		return Vector2i(int(grid.get("x", -1)), int(grid.get("y", -1)))
+	return Vector2i(-1, -1)
+
+
+func _cell_is_valid(cell: Vector2i, moving_id: String = "") -> bool:
+	if cell.x < 0 or cell.y < 0 or cell.x >= GRID_COLUMNS or cell.y >= GRID_ROWS:
+		return false
+	if (cell == Vector2i(0, 3) or cell == Vector2i(7, 3)) and moving_id.is_empty():
+		return false
+	for module in modules:
+		var id := str(module.get("id", ""))
+		if id != moving_id and _module_cell(module) == cell:
+			return false
+	return true
+
+
 func _cell_at(position: Vector2) -> Vector2i:
 	var size := get_rect().size
-	var area_width := size.x - RIGHT_PANEL_WIDTH - MARGIN * 3.0
-	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - BOTTOM_BAR_HEIGHT - 40.0)
-	var cell_size: float = minf((board.size.x - 40.0) / float(GRID_COLUMNS), (board.size.y - 72.0) / float(GRID_ROWS))
+	var panel_reserve := 0.0 if _is_compact(size) else RIGHT_PANEL_WIDTH + MARGIN * 3.0
+	var area_width := maxf(180.0, size.x - panel_reserve)
+	var board := Rect2(MARGIN, TOP_BAR_HEIGHT + 20.0, area_width, size.y - TOP_BAR_HEIGHT - _bottom_bar_height(size) - 40.0)
+	var cell_size: float = maxf(18.0, minf((board.size.x - 40.0) / float(GRID_COLUMNS), (board.size.y - 72.0) / float(GRID_ROWS)))
 	var grid_size := Vector2(cell_size * GRID_COLUMNS, cell_size * GRID_ROWS)
 	var origin := board.position + Vector2((board.size.x - grid_size.x) * 0.5, 44.0)
 	var local: Vector2 = (position - origin) / cell_size
@@ -454,11 +869,13 @@ func _cell_at(position: Vector2) -> Vector2i:
 
 
 func _event_at(position: Vector2, size: Vector2) -> int:
+	if _is_compact(size):
+		return -1
 	var panel_x := size.x - RIGHT_PANEL_WIDTH - MARGIN
 	var panel_top := TOP_BAR_HEIGHT + 20.0
-	var panel := Rect2(panel_x, panel_top, RIGHT_PANEL_WIDTH, size.y - TOP_BAR_HEIGHT - BOTTOM_BAR_HEIGHT - 40.0)
-	var y := panel.position.y + panel.size.y - 192.0
-	for index in range(min(events.size(), 4)):
+	var panel := Rect2(panel_x, panel_top, RIGHT_PANEL_WIDTH, maxf(220.0, size.y - TOP_BAR_HEIGHT - _bottom_bar_height(size) - 40.0))
+	var y := panel.position.y + panel.size.y - 112.0
+	for index in range(min(events.size(), 3)):
 		var row := Rect2(panel.position.x + 14, y + 12 + index * 34, panel.size.x - 28, 28)
 		if row.has_point(position):
 			return index

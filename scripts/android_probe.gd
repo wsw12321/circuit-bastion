@@ -1,8 +1,8 @@
 extends SceneTree
 
-## Headless contract check for the Android export preset and touch view.
+## Android export contract check against the current touch-capable BattleView.
 
-const MOBILE_VIEW_SCRIPT := preload("res://godot/mobile_battle_view.gd")
+const BattleView = preload("res://godot/battle_view.gd")
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -14,18 +14,15 @@ func _run() -> void:
 		return
 	var preset_text := preset_file.get_as_text()
 	for required in [
-		"[preset.2]",
-		'name="Android"',
-		'platform="Android"',
-		'architectures/arm64-v8a=true',
-		'package/unique_name="com.circuitbastion.game"',
+		"[preset.2]", 'name="Android"', 'platform="Android"',
+		"architectures/arm64-v8a=true", 'package/unique_name="com.circuitbastion.game"',
 	]:
 		if not preset_text.contains(required):
 			_fail("missing Android preset field: " + required)
 			return
-	var view = MOBILE_VIEW_SCRIPT.new()
-	if view == null or not view.has_method("_cell_at_mobile"):
-		_fail("mobile BattleView could not be instantiated")
+	var view = BattleView.new()
+	if view == null or not view.has_method("_cell_at"):
+		_fail("touch-capable BattleView could not be instantiated")
 		return
 	print("ANDROID_SMOKE_OK preset=Android arm64=enabled touch=screen")
 	quit(0)

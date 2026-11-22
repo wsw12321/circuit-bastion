@@ -12,6 +12,30 @@ const Replay = preload("res://scripts/replay.gd")
 const FIXED_STEP := 0.1
 const WAVE_COUNT := 10
 const MAX_EVENT_LOG := 512
+const GRID_COLUMNS := 8
+const GRID_ROWS := 6
+const ENTRY_CELL := Vector2i(0, 3)
+const CORE_CELL := Vector2i(7, 3)
+const BENCH_LIMIT := 8
+const SHOP_SIZE := 4
+const SHOP_REFRESH_COST := 8
+
+const MODULE_COSTS := {
+	"scanner": 16,
+	"pulse_cannon": 28,
+	"railgun": 48,
+	"router": 20,
+	"capacitor": 22,
+	"heat_sink": 18,
+	"slow_field": 34,
+	"repair_arm": 32,
+}
+
+const UPGRADE_BRANCHES := {
+	"overclock": {"label": "超频", "description": "伤害与功率提升，热量增加", "cost": 24},
+	"stabilizer": {"label": "稳压", "description": "冷却与热量控制提升", "cost": 22},
+	"automation": {"label": "自动化", "description": "射程与规则响应提升", "cost": 30},
+}
 
 signal event_recorded(event: Dictionary)
 signal event_emitted(event: Dictionary)
@@ -30,6 +54,7 @@ var victory := false
 var current_wave := 0
 var base_integrity := 100
 var charge := 120
+var scrap := 0
 var modules: Dictionary = {}
 var connections: Array = []
 var enemies: Dictionary = {}
@@ -39,6 +64,13 @@ var next_module_id := 1
 var next_enemy_id := 1
 var catalog: RefCounted
 var replay: RefCounted
+var bench: Array = []
+var shop_inventory: Array = []
+var shop_rotation := 0
+var shop_refreshes := 0
+var wave_reward := 0
+var phase := "build"
+var last_failure_reason := ""
 
 const ENEMY_ARCHETYPES := [
 	{"kind": "scout", "label": "侦察蜂", "hp": 34, "speed": 0.12, "damage": 1, "tags": ["light"]},
@@ -78,6 +110,7 @@ func reset(new_seed: int = 1337) -> void:
 	current_wave = 0
 	base_integrity = 100
 	charge = 120
+	scrap = 0
 	modules.clear()
 	connections.clear()
 	enemies.clear()
@@ -85,7 +118,14 @@ func reset(new_seed: int = 1337) -> void:
 	event_sequence = 0
 	next_module_id = 1
 	next_enemy_id = 1
+	bench.clear()
+	shop_rotation = 0
+	shop_refreshes = 0
+	wave_reward = 0
+	phase = "build"
+	last_failure_reason = ""
 	replay = Replay.new(seed_value)
+	_refresh_shop_inventory(false)
 	_emit_event("system", "core", "", "模拟已重置", {"seed": seed_value})
 
 func set_speed(multiplier: float) -> void:
@@ -97,6 +137,173 @@ func set_speed(multiplier: float) -> void:
 	_record_command("set_speed", {"speed": speed})
 	_emit_event("control", "core", "", "速度设为 %.0fx" % speed)
 
+func module_cost(module_kind: String) -> int:
+	return int(MODULE_COSTS.get(module_kind, 0))
+
+func module_spec(module_kind: String) -> Dictionary:
+	var spec: Dictionary = catalog.module_spec(module_kind)
+	if spec.is_empty():
+		spec = MODULE_ARCHETYPES.get(module_kind, {}).duplicate(true)
+	return spec
+
+func is_cell_in_bounds(grid_position: Vector2i) -> bool:
+	return grid_position.x >= 0 and grid_position.x < GRID_COLUMNS and grid_position.y >= 0 and grid_position.y < GRID_ROWS
+
+func is_cell_reserved(grid_position: Vector2i) -> bool:
+	return grid_position == ENTRY_CELL or grid_position == CORE_CELL
+
+func occupied_module_at(grid_position: Vector2i, ignore_module_id := "") -> String:
+	var module_ids: Array = modules.keys()
+	module_ids.sort()
+	for module_id in module_ids:
+		if str(module_id) == ignore_module_id:
+			continue
+		var module: Dictionary = modules[module_id]
+		var grid: Dictionary = module.get("grid", {})
+		if Vector2i(int(grid.get("x", -1)), int(grid.get("y", -1))) == grid_position:
+			return str(module_id)
+	return ""
+
+func preview_placement(module_kind: String, grid_position: Vector2i, rotation := 0, ignore_module_id := "") -> Dictionary:
+	var spec := module_spec(module_kind)
+	var reason := ""
+	if spec.is_empty():
+		reason = "未知模块"
+	elif not is_cell_in_bounds(grid_position):
+		reason = "超出棋盘"
+	elif is_cell_reserved(grid_position):
+		reason = "核心通道不可占用"
+	elif occupied_module_at(grid_position, ignore_module_id) != "":
+		reason = "格点已被占用"
+	var cost := module_cost(module_kind)
+	if reason.is_empty() and ignore_module_id.is_empty() and charge < cost:
+		reason = "电荷不足"
+	return {
+		"valid": reason.is_empty(), "kind": module_kind,
+		"grid": {"x": grid_position.x, "y": grid_position.y},
+		"rotation": posmod(rotation, 4), "cost": cost,
+		"reason": reason, "occupied_by": occupied_module_at(grid_position, ignore_module_id),
+	}
+
+func preview_build(module_kind: String, grid_position: Vector2i, rotation := 0) -> Dictionary:
+	return preview_placement(module_kind, grid_position, rotation)
+
+func build_module(module_kind: String, grid_position: Vector2i, rotation := 0) -> String:
+	if running and not paused and phase == "combat":
+		last_failure_reason = "战斗运行中，请先暂停"
+		_emit_event("warning", "core", "", "无法部署：战斗运行中，请先暂停")
+		return ""
+	var preview := preview_placement(module_kind, grid_position, rotation)
+	if not bool(preview.valid):
+		last_failure_reason = str(preview.reason)
+		_emit_event("warning", "core", "", "无法部署%s" % preview.reason, preview)
+		return ""
+	charge -= int(preview.cost)
+	var module_id := add_module(module_kind, grid_position, rotation)
+	if module_id.is_empty():
+		charge += int(preview.cost)
+		return ""
+	_record_command("build_module", {"kind": module_kind, "x": grid_position.x, "y": grid_position.y, "rotation": posmod(rotation, 4)})
+	_emit_event("build", module_id, "core", "部署完成，消耗 %d 电荷" % int(preview.cost), {"cost": preview.cost})
+	return module_id
+
+func move_module(module_id: String, grid_position: Vector2i) -> bool:
+	if not modules.has(module_id):
+		last_failure_reason = "模块不存在"
+		return false
+	var module: Dictionary = modules[module_id]
+	var preview := preview_placement(str(module.kind), grid_position, int(module.get("rotation", 0)), module_id)
+	if not bool(preview.valid):
+		last_failure_reason = str(preview.reason)
+		_emit_event("warning", module_id, "core", "无法移动：%s" % preview.reason, preview)
+		return false
+	var previous: Dictionary = module.get("grid", {}).duplicate(true)
+	module.grid = {"x": grid_position.x, "y": grid_position.y}
+	_record_command("move_module", {"module": module_id, "x": grid_position.x, "y": grid_position.y})
+	_emit_event("build", module_id, "core", "%s 移至 [%d,%d]" % [module.label, grid_position.x, grid_position.y], {"from": previous, "to": module.grid})
+	return true
+
+func rotate_module(module_id: String, quarter_turns := 1) -> bool:
+	if not modules.has(module_id):
+		return false
+	var module: Dictionary = modules[module_id]
+	module.rotation = posmod(int(module.get("rotation", 0)) + quarter_turns, 4)
+	_record_command("rotate_module", {"module": module_id, "rotation": module.rotation})
+	_emit_event("build", module_id, "core", "%s 旋转至 %d°" % [module.label, int(module.rotation) * 90], {"rotation": module.rotation})
+	return true
+
+func set_module_rotation(module_id: String, rotation: int) -> bool:
+	if not modules.has(module_id):
+		return false
+	var module: Dictionary = modules[module_id]
+	var target := posmod(rotation, 4)
+	var delta := posmod(target - int(module.get("rotation", 0)), 4)
+	if delta == 0:
+		return true
+	return rotate_module(module_id, delta)
+
+func sell_module(module_id: String) -> int:
+	if not modules.has(module_id):
+		return 0
+	var module: Dictionary = modules[module_id]
+	var base_cost := module_cost(str(module.kind))
+	var level := maxi(1, int(module.get("level", 1)))
+	var refund := maxi(1, int(round(float(base_cost * level) * 0.6)))
+	for connection in connections.duplicate(true):
+		if connection.from == module_id or connection.to == module_id:
+			connections.erase(connection)
+	modules.erase(module_id)
+	charge += refund
+	_record_command("sell_module", {"module": module_id, "refund": refund})
+	_emit_event("build", module_id, "core", "%s 已回收，返还 %d 电荷" % [module.label, refund], {"refund": refund})
+	return refund
+
+func upgrade_options(module_id: String) -> Array:
+	if not modules.has(module_id):
+		return []
+	var module: Dictionary = modules[module_id]
+	var level := int(module.get("level", 1))
+	var selected: Dictionary = module.get("upgrades", {})
+	var options: Array = []
+	for branch in ["overclock", "stabilizer", "automation"]:
+		var branch_spec: Dictionary = UPGRADE_BRANCHES[branch]
+		var rank := int(selected.get(branch, 0))
+		options.append({"branch": branch, "label": branch_spec.label, "description": branch_spec.description, "rank": rank, "next_rank": rank + 1, "cost": int(branch_spec.cost) * (level + rank)})
+	return options
+
+func upgrade_module(module_id: String, branch: String) -> bool:
+	if not modules.has(module_id) or not UPGRADE_BRANCHES.has(branch):
+		return false
+	var module: Dictionary = modules[module_id]
+	var upgrades: Dictionary = module.get("upgrades", {})
+	var rank := int(upgrades.get(branch, 0))
+	if rank >= 3:
+		last_failure_reason = "该分支已满级"
+		return false
+	var cost := int(UPGRADE_BRANCHES[branch].cost) * (int(module.get("level", 1)) + rank)
+	if charge < cost:
+		last_failure_reason = "电荷不足"
+		_emit_event("warning", module_id, "core", "升级失败：电荷不足", {"cost": cost})
+		return false
+	charge -= cost
+	upgrades[branch] = rank + 1
+	module.upgrades = upgrades
+	module.level = int(module.get("level", 1)) + 1
+	match branch:
+		"overclock":
+			module.damage = int(module.damage) + 8
+			module.power = int(module.power) + 1
+			module.heat_limit = maxi(40, int(module.heat_limit) - 3)
+		"stabilizer":
+			module.cooldown = maxf(0.2, float(module.cooldown) * 0.88)
+			module.heat = maxi(0, int(module.heat) - 2)
+		"automation":
+			module.range = minf(1.0, float(module.range) + 0.08)
+			module.rule_slots = int(module.get("rule_slots", 2)) + 1
+	_record_command("upgrade_module", {"module": module_id, "branch": branch, "cost": cost, "rank": rank + 1})
+	_emit_event("upgrade", module_id, "core", "%s 编译台升级：%s %d" % [module.label, UPGRADE_BRANCHES[branch].label, rank + 1], {"branch": branch, "rank": rank + 1, "cost": cost})
+	return true
+
 func set_paused(value: bool) -> void:
 	paused = value
 	_record_command("set_paused", {"paused": paused})
@@ -105,10 +312,8 @@ func set_paused(value: bool) -> void:
 func toggle_pause() -> void:
 	set_paused(not paused)
 
-func add_module(module_kind: String, grid_position := Vector2i.ZERO) -> String:
-	var catalog_spec: Dictionary = catalog.module_spec(module_kind)
-	var fallback_spec: Dictionary = MODULE_ARCHETYPES.get(module_kind, {})
-	var spec: Dictionary = catalog_spec if not catalog_spec.is_empty() else fallback_spec.duplicate(true)
+func add_module(module_kind: String, grid_position := Vector2i.ZERO, rotation := 0) -> String:
+	var spec := module_spec(module_kind)
 	if spec.is_empty():
 		return ""
 	var module_id := "M%02d" % next_module_id
@@ -116,10 +321,11 @@ func add_module(module_kind: String, grid_position := Vector2i.ZERO) -> String:
 	modules[module_id] = {
 		"id": module_id, "kind": module_kind, "label": spec.label,
 		"grid": {"x": grid_position.x, "y": grid_position.y},
+		"rotation": posmod(rotation, 4), "level": 1,
 		"power": int(spec.power), "damage": int(spec.damage),
 		"cooldown": float(spec.cooldown), "cooldown_left": 0.0,
 		"range": float(spec.range), "heat": 0, "heat_limit": 100,
-		"rules": [], "firmware": "standard", "disabled": false,
+		"rules": [], "rule_slots": 2, "upgrades": {}, "firmware": "standard", "disabled": false,
 	}
 	_record_command("add_module", {"kind": module_kind, "x": grid_position.x, "y": grid_position.y})
 	_emit_event("module", module_id, "", "部署 %s" % spec.label, {"kind": module_kind})
@@ -147,6 +353,83 @@ func add_rule(module_id: String, trigger: String, condition: String, action: Str
 	_emit_event("rule", module_id, "", "写入规则 %s → %s" % [trigger, action], rule)
 	return true
 
+func get_shop_inventory() -> Array:
+	return shop_inventory.duplicate(true)
+
+func refresh_shop(force := false) -> bool:
+	if not force and charge < SHOP_REFRESH_COST:
+		last_failure_reason = "电荷不足"
+		_emit_event("warning", "shop", "core", "刷新商店失败：电荷不足", {"cost": SHOP_REFRESH_COST})
+		return false
+	if not force:
+		charge -= SHOP_REFRESH_COST
+	_refresh_shop_inventory(true)
+	return true
+
+func _refresh_shop_inventory(consume_rotation: bool) -> void:
+	if consume_rotation:
+		shop_refreshes += 1
+	shop_rotation = posmod(shop_rotation + 1, 64)
+	var kinds: Array = MODULE_COSTS.keys()
+	kinds.sort()
+	shop_inventory.clear()
+	for index in SHOP_SIZE:
+		var kind: String = str(kinds[posmod(shop_rotation + index * 3, kinds.size())])
+		var spec := module_spec(kind)
+		shop_inventory.append({
+			"slot": index, "kind": kind, "label": str(spec.get("label", kind)),
+			"cost": module_cost(kind), "stock": 1,
+			"role": str(spec.get("role", "module")),
+		})
+	_emit_event("shop", "shop", "core", "商店库存已编译", {"rotation": shop_rotation, "inventory": shop_inventory})
+
+func buy_shop_slot(slot: int, to_bench := true) -> bool:
+	if slot < 0 or slot >= shop_inventory.size():
+		return false
+	var item: Dictionary = shop_inventory[slot]
+	if int(item.get("stock", 0)) <= 0:
+		last_failure_reason = "该商品已售罄"
+		return false
+	var cost := int(item.get("cost", 0))
+	if charge < cost:
+		last_failure_reason = "电荷不足"
+		_emit_event("warning", "shop", "core", "购买失败：电荷不足", {"slot": slot, "cost": cost})
+		return false
+	if to_bench and bench.size() >= BENCH_LIMIT:
+		last_failure_reason = "备战栏已满"
+		return false
+	charge -= cost
+	item.stock = 0
+	shop_inventory[slot] = item
+	bench.append({"kind": item.kind, "label": item.label, "rotation": 0, "level": 1})
+	_record_command("buy_shop_slot", {"slot": slot, "kind": item.kind, "cost": cost})
+	_emit_event("shop", "shop", "core", "购入 %s，已加入备战栏" % item.label, {"slot": slot, "cost": cost})
+	return true
+
+func get_bench() -> Array:
+	return bench.duplicate(true)
+
+func deploy_bench_item(bench_index: int, grid_position: Vector2i, rotation := 0) -> String:
+	if bench_index < 0 or bench_index >= bench.size():
+		return ""
+	var item: Dictionary = bench[bench_index]
+	var module_id := build_module(str(item.kind), grid_position, rotation)
+	if module_id.is_empty():
+		return ""
+	bench.remove_at(bench_index)
+	_record_command("deploy_bench_item", {"bench_index": bench_index, "module": module_id})
+	return module_id
+
+func discard_bench_item(bench_index: int) -> bool:
+	if bench_index < 0 or bench_index >= bench.size():
+		return false
+	var item: Dictionary = bench[bench_index]
+	bench.remove_at(bench_index)
+	var refund := maxi(1, int(round(float(module_cost(str(item.kind))) * 0.25)))
+	charge += refund
+	_emit_event("shop", "shop", "core", "弃置 %s，返还 %d 电荷" % [item.label, refund], {"refund": refund})
+	return true
+
 func start_battle() -> bool:
 	if modules.is_empty():
 		_emit_event("warning", "core", "", "没有可运行模块")
@@ -155,11 +438,55 @@ func start_battle() -> bool:
 	paused = false
 	finished = false
 	victory = false
+	phase = "combat"
+	last_failure_reason = ""
 	current_wave = 1
 	_record_command("start_battle")
 	_spawn_wave(current_wave)
 	_emit_event("wave", "core", "", "第 1 波开始", {"wave": current_wave})
 	return true
+
+func retry_battle() -> bool:
+	if modules.is_empty():
+		return start_battle()
+	enemies.clear()
+	connections = connections.duplicate(true)
+	base_integrity = 100
+	finished = false
+	victory = false
+	running = true
+	paused = false
+	phase = "combat"
+	current_wave = 1
+	tick_count = 0
+	elapsed = 0.0
+	accumulator = 0.0
+	_record_command("retry_battle")
+	_spawn_wave(current_wave)
+	_emit_event("control", "core", "", "系统已复位，第 1 波重试", {"reason": last_failure_reason})
+	return true
+
+func settle_wave() -> Dictionary:
+	var settlement := {"wave": current_wave, "reward": wave_reward, "charge": charge, "integrity": base_integrity, "phase": phase}
+	_emit_event("settlement", "core", "", "第 %d 波结算：+%d 电荷" % [current_wave, wave_reward], settlement)
+	return settlement
+
+func get_diagnostics() -> Dictionary:
+	var warnings: Array = []
+	var module_ids: Array = modules.keys()
+	module_ids.sort()
+	for module_id in module_ids:
+		var module: Dictionary = modules[module_id]
+		var heat_value := int(module.get("heat", 0))
+		var heat_limit := maxi(1, int(module.get("heat_limit", 100)))
+		if heat_value >= int(float(heat_limit) * 0.8):
+			warnings.append({"module": module_id, "severity": "warning", "text": "%s 热量达到 %d%%" % [module.label, int(float(heat_value) / float(heat_limit) * 100.0)]})
+		if bool(module.get("disabled", false)):
+			warnings.append({"module": module_id, "severity": "critical", "text": "%s 已停机" % module.label})
+	for connection in connections:
+		if not modules.has(connection.from) or not modules.has(connection.to):
+			warnings.append({"module": connection.from, "severity": "critical", "text": "存在悬空线路"})
+	return {"warnings": warnings, "warning_count": warnings.size(), "phase": phase, "last_failure": last_failure_reason}
 
 ## Compatibility name used by the composition root and older prototype code.
 func start_wave() -> bool:
@@ -304,14 +631,21 @@ func _spawn_enemy(archetype: Dictionary, wave_index: int, ordinal: int) -> void:
 	_emit_event("enemy_spawn", "core", enemy_id, "生成 %s" % archetype.label, {"wave": wave_index, "tags": archetype.tags})
 
 func _finish_wave() -> void:
-	_emit_event("wave_clear", "core", "", "第 %d 波完成" % current_wave, {"wave": current_wave, "charge": charge})
+	wave_reward = 12 + current_wave * 3
+	charge += wave_reward
+	scrap += current_wave
+	phase = "settlement"
+	_emit_event("wave_clear", "core", "", "第 %d 波完成，奖励 %d 电荷" % [current_wave, wave_reward], {"wave": current_wave, "charge": charge, "reward": wave_reward, "scrap": scrap})
+	settle_wave()
 	if current_wave >= WAVE_COUNT:
 		finished = true
 		running = false
+		phase = "victory" if base_integrity > 0 else "defeat"
 		victory = base_integrity > 0
 		_emit_event("victory" if victory else "defeat", "core", "", "堡垒完成 10 波")
 		return
 	current_wave += 1
+	phase = "combat"
 	_spawn_wave(current_wave)
 	_emit_event("wave", "core", "", "第 %d 波开始" % current_wave, {"wave": current_wave})
 
@@ -320,7 +654,11 @@ func get_snapshot() -> Dictionary:
 		"seed": seed_value, "tick": tick_count, "elapsed": elapsed,
 		"speed": speed, "paused": paused, "running": running,
 		"finished": finished, "victory": victory, "wave": current_wave,
-		"integrity": base_integrity, "charge": charge,
+		"integrity": base_integrity, "charge": charge, "scrap": scrap,
+		"phase": phase, "wave_reward": wave_reward,
+		"bench": bench.duplicate(true), "shop": shop_inventory.duplicate(true),
+		"shop_rotation": shop_rotation, "shop_refreshes": shop_refreshes,
+		"diagnostics": get_diagnostics(),
 		"content_signature": catalog.content_signature(),
 		"modules": modules.duplicate(true), "connections": connections.duplicate(true),
 		"enemies": enemies.duplicate(true), "events": event_log.duplicate(true),
@@ -371,6 +709,13 @@ func load_state(state: Dictionary) -> bool:
 	current_wave = int(snapshot_state.get("wave", 0))
 	base_integrity = int(snapshot_state.get("integrity", 100))
 	charge = int(snapshot_state.get("charge", 120))
+	scrap = int(snapshot_state.get("scrap", 0))
+	phase = str(snapshot_state.get("phase", "build"))
+	wave_reward = int(snapshot_state.get("wave_reward", 0))
+	bench = snapshot_state.get("bench", []).duplicate(true)
+	shop_inventory = snapshot_state.get("shop", []).duplicate(true)
+	shop_rotation = int(snapshot_state.get("shop_rotation", 0))
+	shop_refreshes = int(snapshot_state.get("shop_refreshes", 0))
 	modules = snapshot_state.get("modules", {}).duplicate(true)
 	connections = snapshot_state.get("connections", []).duplicate(true)
 	enemies = snapshot_state.get("enemies", {}).duplicate(true)
