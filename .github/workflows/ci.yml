@@ -86,6 +86,7 @@ jobs:
           PERF_BUDGET_MS=5000 "$GODOT_BIN" --headless --path . --script scripts/performance_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/resource_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
           "$GODOT_BIN" --headless --path . --script scripts/world_physics_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
+          "$GODOT_BIN" --headless --path . --script scripts/world_physics_probe.gd --display-driver headless --audio-driver Dummy --rendering-method gl_compatibility
 
 
   godot-windows-smoke:

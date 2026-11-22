@@ -107,7 +107,7 @@ func deploy_module_at_cell(module_kind: String, grid_position: Vector2i, rotatio
 	return deploy_module(module_kind, cell_to_world(grid_position), rotation)
 
 func deploy_module(module_kind: String, world_position: Vector2, rotation := 0) -> String:
-	var preview := preview_deployment(module_kind, world_position, rotation)
+	var preview: Dictionary = preview_deployment(module_kind, world_position, rotation)
 	var grid_position: Vector2i = preview.grid
 	if not bool(preview.get("valid", false)):
 		deployment_rejected.emit(module_kind, grid_position, str(preview.get("reason", "invalid")))
@@ -132,7 +132,7 @@ func deploy_bench_item_at_cell(bench_index: int, grid_position: Vector2i, rotati
 func move_module_to_cell(module_id: String, grid_position: Vector2i) -> bool:
 	if simulation == null:
 		return false
-	var preview := simulation.preview_placement(
+	var preview: Dictionary = simulation.preview_placement(
 		str(simulation.modules.get(module_id, {}).get("kind", "")),
 		grid_position,
 		int(simulation.modules.get(module_id, {}).get("rotation", 0)),
@@ -141,7 +141,7 @@ func move_module_to_cell(module_id: String, grid_position: Vector2i) -> bool:
 	if not bool(preview.get("valid", false)):
 		deployment_rejected.emit(str(simulation.modules.get(module_id, {}).get("kind", "")), grid_position, str(preview.get("reason", "invalid")))
 		return false
-	var moved := simulation.move_module(module_id, grid_position)
+	var moved: bool = simulation.move_module(module_id, grid_position)
 	if moved:
 		sync_snapshot(simulation.get_snapshot())
 		deployment_snapped.emit(module_id, grid_position, cell_to_world(grid_position))
